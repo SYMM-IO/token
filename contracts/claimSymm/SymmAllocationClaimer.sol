@@ -17,6 +17,7 @@ contract SymmAllocationClaimer is AccessControlEnumerable, Pausable {
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
+    uint256 public constant MAX_ISSUABLE_TOKEN = 400_000_000 * 1e18;
     address public immutable token;
     uint256 public immutable mintFactor; // decimal 18
     address public symmioFoundation;
@@ -26,6 +27,7 @@ contract SymmAllocationClaimer is AccessControlEnumerable, Pausable {
     uint256 public totalAllocation;
     uint256 public totalClaimedAmount;
     uint256 public totalAvailableAmountForAdmin;
+    uint256 public totalMintAmount;
 
     // Events
     event SetBatchAllocations(address[] users, uint256[] powers);
@@ -114,14 +116,19 @@ contract SymmAllocationClaimer is AccessControlEnumerable, Pausable {
             userAllocations[msg.sender] > 0,
             "User allocation must be larger than 0"
         );
+        require(
+            userAllocations[msg.sender] + totalMintAmount <= MAX_ISSUABLE_TOKEN,
+            "Max mintable token is reached"
+        );
         uint256 amountToClaim = (userAllocations[msg.sender] * mintFactor) /
             1e18;
         totalAvailableAmountForAdmin += (userAllocations[msg.sender] -
             amountToClaim);
+        totalMintAmount += userAllocations[msg.sender];
         userAllocations[msg.sender] = 0;
         totalClaimedAmount += amountToClaim;
-        IMintableERC20(token).mint(msg.sender, amountToClaim);
         claimedAmount[msg.sender] += amountToClaim;
+        IMintableERC20(token).mint(msg.sender, amountToClaim);
         emit Claim(msg.sender, amountToClaim);
     }
 
