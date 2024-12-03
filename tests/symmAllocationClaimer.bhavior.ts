@@ -3,6 +3,7 @@ import { expect } from "chai"
 import { SymmAllocationClaimer, Symmio } from "../typechain-types"
 import { initializeFixture, RunContext } from "./Initialize.fixture"
 import { e } from "../utils"
+import { AddressLike, ZeroAddress } from "ethers"
 
 export function shouldBehaveLikeSymmAllocationClaimer() {
 	let context: RunContext
@@ -23,12 +24,13 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 		symmToken = context.symmioToken
 	})
 
+	// Deployment tests
 	describe("Deployment", () => {
-		it("should deploy successfully", async () => {
+		it("Should deploy the contract successfully", async () => {
 			expect(await symmClaim.getAddress()).to.be.properAddress
 		})
 
-		it("should grant roles correctly", async () => {
+		it("Should correctly grant roles during deployment", async () => {
 			for (const role of Object.values(ROLES)) {
 				const hasRole = await symmClaim.hasRole(await symmClaim[role](), await context.signers.admin.getAddress())
 				expect(hasRole).to.be.true
@@ -36,8 +38,9 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 		})
 	})
 
-	describe("Config", () => {
-		it("should (un)pause correctly", async () => {
+	// Configuration tests
+	describe("Configuration", () => {
+		it("Should correctly pause and unpause the contract", async () => {
 			expect(await symmClaim.paused()).to.be.false
 			await symmClaim.connect(context.signers.admin).pause()
 			expect(await symmClaim.paused()).to.be.true
@@ -46,8 +49,9 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 		})
 	})
 
+	// Allocation setting tests
 	describe("Setting Allocations", () => {
-		it("should set batch allocations correctly", async () => {
+		it("Should set batch allocations for users correctly", async () => {
 			const users = [context.signers.user1.address, context.signers.user2.address]
 			const allocations = [e(1000), e(2000)] // Allocations in 18 decimals
 
@@ -58,7 +62,17 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 			expect(await symmClaim.totalAllocation()).to.equal(e(3000))
 		})
 
-		it("should revert if total allocation exceeds max issuable tokens", async () => {
+		it("Should revert if a non-setter attempts to set allocations", async () => {
+			const users = [context.signers.user1.address, context.signers.user2.address]
+			const allocations = [e(1000), e(2000)]
+
+			await expect(symmClaim.connect(context.signers.user1).setBatchAllocations(users, allocations)).to.be.revertedWithCustomError(
+				symmClaim,
+				"AccessControlUnauthorizedAccount",
+			)
+		})
+
+		it("Should revert if the total allocation exceeds the maximum issuable tokens", async () => {
 			const users = [context.signers.user1.address]
 			const allocations = [e(401000000)] // Exceeds MAX_ISSUABLE_TOKEN
 
@@ -67,8 +81,39 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 				"TotalAllocationExceedsMax",
 			)
 		})
+
+		it("Should revert if user and allocation array lengths do not match", async () => {
+			const users = [context.signers.user1.address, context.signers.user2.address]
+			const allocations = [e(1000)]
+
+			await expect(symmClaim.connect(context.signers.setter).setBatchAllocations(users, allocations)).to.be.revertedWithCustomError(
+				symmClaim,
+				"ArrayLengthMismatch",
+			)
+		})
+
+		it("Should revert if any account in the batch is a zero address", async () => {
+			const users = [context.signers.user1.address, ZeroAddress]
+			const allocations = [e(1000), e(1000)]
+
+			await expect(symmClaim.connect(context.signers.setter).setBatchAllocations(users, allocations)).to.be.revertedWithCustomError(
+				symmClaim,
+				"ZeroAddress",
+			)
+		})
+
+		it("Should revert if input arrays are empty", async () => {
+			const users: AddressLike[] = []
+			const allocations: bigint[] = []
+
+			await expect(symmClaim.connect(context.signers.setter).setBatchAllocations(users, allocations)).to.be.revertedWithCustomError(
+				symmClaim,
+				"EmptyArrays",
+			)
+		})
 	})
 
+	// Claiming allocations tests
 	describe("Claiming Allocations", () => {
 		beforeEach(async () => {
 			const users = [context.signers.user1.address]
@@ -76,24 +121,25 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 			await symmClaim.connect(context.signers.setter).setBatchAllocations(users, allocations)
 		})
 
-		it("should allow a user to claim their allocation", async () => {
+		it("Should allow users to claim their allocations", async () => {
 			const user1InitialBalance = await symmToken.balanceOf(context.signers.user1.address)
 			await symmClaim.connect(context.signers.user1).claim()
 
 			const user1FinalBalance = await symmToken.balanceOf(context.signers.user1.address)
-			expect(user1FinalBalance - user1InitialBalance).to.equal(e(500)) // Adjust for mintFactor
+			expect(user1FinalBalance - user1InitialBalance).to.equal(e(500)) // Adjusted for mintFactor
 
 			expect(await symmClaim.userAllocations(context.signers.user1.address)).to.equal(e(0))
 			expect(await symmClaim.totalAllocation()).to.equal(e(1000))
 		})
 
-		it("should revert if a user has no allocation", async () => {
+		it("Should revert if a user with no allocation attempts to claim", async () => {
 			await expect(symmClaim.connect(context.signers.user2).claim()).to.be.revertedWithCustomError(symmClaim, "UserHasNoAllocation")
 		})
 	})
 
+	// Admin claims tests
 	describe("Admin Claims", () => {
-		it("should allow admin to claim tokens", async () => {
+		it("Should allow the admin to claim tokens for the foundation", async () => {
 			const users = [context.signers.user1.address]
 			const allocations = [e(1000)]
 			await symmClaim.connect(context.signers.setter).setBatchAllocations(users, allocations)
@@ -101,13 +147,40 @@ export function shouldBehaveLikeSymmAllocationClaimer() {
 
 			await symmClaim.connect(context.signers.admin).adminClaim(e(500)) // Admin claims tokens
 			const foundationBalance = await symmToken.balanceOf(context.signers.symmioFoundation.address)
-			expect(foundationBalance).to.equal(e(500)) // Check foundation balance
+			expect(foundationBalance).to.equal(e(500))
 		})
 
-		it("should revert if admin tries to claim more than available", async () => {
+		it("Should revert if the admin attempts to claim more tokens than available", async () => {
 			await expect(symmClaim.connect(context.signers.admin).adminClaim(e(1000))).to.be.revertedWithCustomError(
 				symmClaim,
 				"AdminClaimAmountExceedsAvailable",
+			)
+		})
+	})
+
+	// Symmio Foundation address tests
+	describe("Set Symmio Foundation Address", () => {
+		it("Should allow the setter to update the Symmio Foundation address", async () => {
+			const newAddress = await context.signers.user2.getAddress()
+
+			await symmClaim.connect(context.signers.setter).setSymmioFoundationAddress(newAddress)
+
+			expect(await symmClaim.symmioFoundationAddress()).to.equal(newAddress)
+		})
+
+		it("Should revert if a non-setter attempts to update the Symmio Foundation address", async () => {
+			const newAddress = await context.signers.user2.getAddress()
+
+			await expect(symmClaim.connect(context.signers.user1).setSymmioFoundationAddress(newAddress)).to.be.revertedWithCustomError(
+				symmClaim,
+				"AccessControlUnauthorizedAccount",
+			)
+		})
+
+		it("Should revert if the new Symmio Foundation address is the zero address", async () => {
+			await expect(symmClaim.connect(context.signers.setter).setSymmioFoundationAddress(ZeroAddress)).to.be.revertedWithCustomError(
+				symmClaim,
+				"ZeroAddress",
 			)
 		})
 	})
