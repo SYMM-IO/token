@@ -6,10 +6,9 @@ import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
 /**
  * @title Symmio token contract
- * @dev The DEFAULT_ADMIN_ROLE will be assigned to a timelock contract managed by multisignature wallets.
+ * @dev The DEFAULT_ADMIN_ROLE will be assigned to a timelock contract managed by multi-signature wallets.
  */
 contract Symmio is ERC20Burnable, AccessControlEnumerable {
-    // Define the Minter role
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     constructor(
@@ -17,7 +16,6 @@ contract Symmio is ERC20Burnable, AccessControlEnumerable {
         string memory symbol,
         address admin
     ) ERC20(name, symbol) {
-        // Grant the deployer the default admin role and the minter role
         require(admin != address(0), "Zero address");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
