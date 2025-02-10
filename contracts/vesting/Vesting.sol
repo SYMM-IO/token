@@ -14,7 +14,7 @@ contract Vesting is AccessControlEnumerable{
     uint256 public immutable startTime;
     address public immutable symmAddress;
 
-    constructor(uint256 _totalTime, uint256 _startTime, address _symmTime, address admin){
+    constructor(address admin, uint256 _totalTime, uint256 _startTime, address _symmTime){
         require(block.timestamp >= startTime, "Start time should be grater or equal to now");
         totalTime = _totalTime;
         startTime = _startTime;
@@ -30,19 +30,11 @@ contract Vesting is AccessControlEnumerable{
     }
 
     function claim(uint256 amount) external{
-        uint256 availableAmount = getAvailableAmount(msg.sender);//check there are some remained tokens, consider adding a method for paying all remaining tokens
-        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
-        claimedAmounts[msg.sender] += amount; //Check the compiler version should avoid O.F.
-        //FIX: mint or transfer
-        Symmio(symmAddress).mint(msg.sender, amount);
+        _claim(amount, msg.sender);
     }
 
     function claimFor(uint256 amount, address user) external onlyRole(ADMIN_ROLE){ //Check should we have some amount that can be freed without time
-        uint256 availableAmount = getAvailableAmount(user);
-        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
-        claimedAmounts[user] += amount; //Check the compiler version should avoid O.F.
-        //FIX: mint or transfer
-        Symmio(symmAddress).mint(user, amount);
+        _claim(amount, user);
     }
 
     function getAvailableAmount(address user) public view returns(uint256){
@@ -58,5 +50,12 @@ contract Vesting is AccessControlEnumerable{
             availableAmount -= claimedAmounts[user];
         return availableAmount;
     }
-}
+
+    function _claim(uint256 amount, address user) internal { //Check should we have some amount that can be freed without time
+        uint256 availableAmount = getAvailableAmount(user);
+        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
+        claimedAmounts[user] += amount; //Check the compiler version should avoid O.F.
+        //FIX: mint or transfer
+        Symmio(symmAddress).mint(user, amount);
+    }}
 
