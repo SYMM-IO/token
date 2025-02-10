@@ -8,15 +8,15 @@ contract Vesting is Ownable{
     mapping (address => uint256) public tokenAmounts;
     mapping (address => uint256) public claimedAmounts;
 
-    uint256 public TOTAL_TIME;
-    uint256 public START_TIME;
-    address public SYMM_ADDRESS;
+    uint256 public immutable totalTime;
+    uint256 public immutable startTime;
+    address public immutable symmAddress;
 
-    constructor(uint256 _TOTAL_TIME, uint256 _START_TIME, address _SYMM_ADDRESS, address owner) Ownable(owner){
-        require(block.timestamp >= START_TIME, "Start time should be grater or equal to now");
-        TOTAL_TIME = _TOTAL_TIME;
-        START_TIME = _START_TIME;
-        SYMM_ADDRESS = _SYMM_ADDRESS;
+    constructor(uint256 _totalTime, uint256 _startTime, address _symmTime, address owner) Ownable(owner){
+        require(block.timestamp >= startTime, "Start time should be grater or equal to now");
+        totalTime = _totalTime;
+        startTime = _startTime;
+        symmAddress = _symmTime;
     }
 
 
@@ -30,7 +30,7 @@ contract Vesting is Ownable{
         require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
         claimedAmounts[msg.sender] += amount; //Check the compiler version should avoid O.F.
         //FIX: mint or transfer
-        Symmio(SYMM_ADDRESS).mint(msg.sender, amount);
+        Symmio(symmAddress).mint(msg.sender, amount);
     }
 
     function claimFor(uint256 amount, address user) external onlyOwner{ //Check should we have some amount that can be freed without time
@@ -38,17 +38,17 @@ contract Vesting is Ownable{
         require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
         claimedAmounts[user] += amount; //Check the compiler version should avoid O.F.
         //FIX: mint or transfer
-        Symmio(SYMM_ADDRESS).mint(user, amount);
+        Symmio(symmAddress).mint(user, amount);
     }
 
     function getAvailableAmount(address user) public view returns(uint256){
         uint256 endTime = block.timestamp;
-        if(endTime > START_TIME + TOTAL_TIME)
-            endTime = START_TIME + TOTAL_TIME;
+        if(endTime > startTime + totalTime)
+            endTime = startTime + totalTime;
         uint256 availableAmount =
             (
-                (tokenAmounts[user] * 1e18 / TOTAL_TIME) *
-                (endTime - START_TIME)
+                (tokenAmounts[user] * 1e18 / totalTime) *
+                (endTime - startTime)
             ) / 1e18;
         if (availableAmount >= claimedAmounts[user])
             availableAmount -= claimedAmounts[user];
