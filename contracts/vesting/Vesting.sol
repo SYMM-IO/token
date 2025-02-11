@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import "../token/symm.sol";
 
-contract Vesting is AccessControlEnumerable{
+contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     mapping (address => uint256) public tokenAmounts;
     mapping (address => uint256) public claimedAmounts;
 
-    uint256 public immutable totalTime;
-    uint256 public immutable startTime;
-    address public immutable symmAddress;
+    uint256 public totalTime;
+    uint256 public startTime;
+    address public symmAddress;
 
-    constructor(address admin, uint256 _totalTime, uint256 _startTime, address _symmTime){
+    function initialize(address admin, uint256 _totalTime, uint256 _startTime, address _symmTime) public initializer{
+        __AccessControlEnumerable_init();
         require(block.timestamp >= startTime, "Start time should be grater or equal to now");
         totalTime = _totalTime;
         startTime = _startTime;
@@ -22,7 +24,6 @@ contract Vesting is AccessControlEnumerable{
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin); //Check: should they be different
     }
-
 
     function setTokenAmount(address user, uint256 amount) external onlyRole(ADMIN_ROLE){
         require(amount >= claimedAmounts[user], "Requested amount exceeds claimed amount of the user");
@@ -57,5 +58,6 @@ contract Vesting is AccessControlEnumerable{
         claimedAmounts[user] += amount; //Check the compiler version should avoid O.F.
         //FIX: mint or transfer
         Symmio(symmAddress).mint(user, amount);
-    }}
+    }
+}
 
