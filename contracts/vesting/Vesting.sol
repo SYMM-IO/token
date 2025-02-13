@@ -59,5 +59,6 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
         //FIX: mint or transfer
         Symmio(symmAddress).mint(user, amount);
     }
+
 }
 
