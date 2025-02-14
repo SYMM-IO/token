@@ -12,25 +12,9 @@ interface IPool {
      */
     function getCurrentLiveBalances() external view returns (uint256[] memory balancesLiveScaled18);
 
-    function queryAddLiquidityProportional(
-        address pool,
-        uint256 exactBptAmountOut,
-        address sender,
-        bytes memory userData
-    ) external returns (uint256[] memory amountsIn);
+    /**
+     * @dev Returns the value of bpt tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
 
-    function addLiquidityProportional(
-        address pool,
-        uint256[] memory maxAmountsIn,
-        uint256 exactBptAmountOut,
-        bool wethIsEth,
-        bytes memory userData
-    ) external payable returns (uint256[] memory amountsIn);
-
-    function queryAddLiquidityUnbalanced(
-        address pool,
-        uint256[] memory exactAmountsIn,
-        address sender,
-        bytes memory userData
-    ) external returns (uint256 bptAmountOut);
 }

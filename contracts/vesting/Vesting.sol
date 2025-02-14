@@ -4,8 +4,9 @@ pragma solidity ^0.8.27;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import "../token/symm.sol";
+import "./LiquidityHandler.sol";
 
-contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
+contract Vesting is Initializable, AccessControlEnumerableUpgradeable, LiquidityHandler{
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     mapping (address => uint256) public tokenAmounts;
@@ -60,5 +61,14 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
         Symmio(symmAddress).mint(user, amount);
     }
 
+    function setPoolAddress(address _poolAddress) external onlyRole(ADMIN_ROLE){
+        _setPoolAddress(_poolAddress);
+        //Check event?
+    }
+
+    function setRouterAddress(address _routerAddress) external onlyRole(ADMIN_ROLE){
+        _setRouterAddress(_routerAddress);
+        //Check event?
+    }
 }
 
