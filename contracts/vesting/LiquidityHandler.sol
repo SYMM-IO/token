@@ -1,33 +1,35 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IPool.sol";
 import "./interfaces/IRouter.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract LiquidityHandler is Initializable{
+contract LiquidityHandler{
 
     address public poolAddress;
-    address public routerAddress;
-
-    function initialize() public initializer{
-
-    }
+    address public BPRouterAddress;
+    address public BPVaultAddress; //TODO: Setter
 
     function _setPoolAddress(address _poolAddress) internal{
         poolAddress = _poolAddress;
     }
 
     function _setRouterAddress(address _routerAddress) internal{
-        routerAddress = _routerAddress;
+        BPRouterAddress = _routerAddress;
     }
 
     function _addLiquidity(uint256 symmIn) internal returns(uint256[] memory){
         (uint256 usdcIn, uint256 BPTAmountOut) = quoteUSDC_BPT(symmIn);
+        IERC20[] memory poolTokens = IPool(poolAddress).getTokens();
+        (IERC20 symm, IERC20 usdc) = (poolTokens[0], poolTokens[1]);
+        usdc.transferFrom(msg.sender, address(this), usdcIn); //Check from and to
+        usdc.approve(BPVaultAddress, usdcIn);
+        symm.approve(BPVaultAddress, symmIn);
         uint256[] memory amountsIn = new uint256[](2);
         amountsIn[0] = symmIn;
         amountsIn[1] =  usdcIn;
-        return IRouter(routerAddress).addLiquidityProportional(
+        return IRouter(BPRouterAddress).addLiquidityProportional(
             poolAddress,
             amountsIn,
             BPTAmountOut,

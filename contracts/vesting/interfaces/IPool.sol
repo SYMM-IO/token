@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 interface IPool {
     /**
      * @notice Gets the current live balances of the pool as fixed point, 18-decimal numbers.
@@ -17,4 +19,9 @@ interface IPool {
      */
     function totalSupply() external view returns (uint256);
 
+    /**
+     * @notice Gets the tokens registered in the pool.
+     * @return tokens List of tokens in the pool, sorted in registration order
+     */
+    function getTokens() external view returns (IERC20[] memory tokens);
 }
