@@ -9,6 +9,7 @@ import "solidity-coverage"
 
 import "./tasks/SymmAllocationClaimer"
 import "./tasks/symmioToken"
+import "./tasks/Vesting";
 
 dotenv.config()
 
