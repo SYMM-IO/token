@@ -6,7 +6,7 @@ import "./interfaces/IRouter.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract LiquidityHandler{
-
+    //TODO: consider that as a contract this would be where symm and usdc tokens are here.
     address public poolAddress;
     address public BPRouterAddress;
     address public BPVaultAddress; //TODO: Setter
@@ -36,6 +36,10 @@ contract LiquidityHandler{
             false, //wethIsEth: bool
             "" //userData: bytes
         );
+    }
+
+    function _removeLiquidity(uint256 exactBptAmountIn) internal returns(uint256[] memory amountsOut){
+        return IRouter(BPRouterAddress).removeLiquidityProportional(BPRouterAddress, exactBptAmountIn, [0, 0], false, "");
     }
 
     function quoteUSDC_BPT(uint256 symmAmount) public view returns(uint256, uint256){ //Check: 1. should the name include usdc? 2. Is this good as a view method or we should have a separate one for usdc(approve)
