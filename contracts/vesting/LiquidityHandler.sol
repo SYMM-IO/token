@@ -19,7 +19,7 @@ contract LiquidityHandler{
         BPRouterAddress = _routerAddress;
     }
 
-    function _addLiquidity(uint256 symmIn) internal returns(uint256[] memory){
+    function _addLiquidity(uint256 symmIn) internal returns(uint256[] memory, uint256){
         (uint256 usdcIn, uint256 BPTAmountOut) = quoteUSDC_BPT(symmIn);
         IERC20[] memory poolTokens = IPool(poolAddress).getTokens();
         (IERC20 symm, IERC20 usdc) = (poolTokens[0], poolTokens[1]);
@@ -29,18 +29,20 @@ contract LiquidityHandler{
         uint256[] memory amountsIn = new uint256[](2);
         amountsIn[0] = symmIn;
         amountsIn[1] =  usdcIn;
-        return IRouter(BPRouterAddress).addLiquidityProportional(
+        return (IRouter(BPRouterAddress).addLiquidityProportional(
             poolAddress,
             amountsIn,
             BPTAmountOut,
             false, //wethIsEth: bool
             "" //userData: bytes
-        );
+        ), BPTAmountOut);
     }
 
-    function _removeLiquidity(uint256 exactBptAmountIn) internal returns(uint256[] memory amountsOut){
-        return IRouter(BPRouterAddress).removeLiquidityProportional(BPRouterAddress, exactBptAmountIn, [0, 0], false, "");
-    }
+//    function _removeLiquidity(uint256 exactBptAmountIn) internal returns(uint256[] memory amountsOut){
+//        uint256[] minAmountsIn = new uint256[](2);
+//        (mintAmountIn[0], minAmountsIn[1]) = (0, 0);
+//        return IRouter(BPRouterAddress).removeLiquidityProportional(BPRouterAddress, exactBptAmountIn, minAmountsIn, false, "");
+//    }
 
     function quoteUSDC_BPT(uint256 symmAmount) public view returns(uint256, uint256){ //Check: 1. should the name include usdc? 2. Is this good as a view method or we should have a separate one for usdc(approve)
         uint256[] memory balancesLiveScaled18 = IPool(poolAddress).getCurrentLiveBalances();
