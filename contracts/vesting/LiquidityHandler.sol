@@ -9,7 +9,7 @@ contract LiquidityHandler{
     //TODO: consider that as a contract this would be where symm and usdc tokens are here.
     address public poolAddress;
     address public BPRouterAddress;
-    address public BPVaultAddress; //TODO: Setter
+    address public BPVaultAddress; //TODO: hardCode
 
     function _setPoolAddress(address _poolAddress) internal{
         poolAddress = _poolAddress;
@@ -38,13 +38,8 @@ contract LiquidityHandler{
         ), BPTAmountOut);
     }
 
-//    function _removeLiquidity(uint256 exactBptAmountIn) internal returns(uint256[] memory amountsOut){
-//        uint256[] minAmountsIn = new uint256[](2);
-//        (mintAmountIn[0], minAmountsIn[1]) = (0, 0);
-//        return IRouter(BPRouterAddress).removeLiquidityProportional(BPRouterAddress, exactBptAmountIn, minAmountsIn, false, "");
-//    }
-
-    function quoteUSDC_BPT(uint256 symmAmount) public view returns(uint256, uint256){ //Check: 1. should the name include usdc? 2. Is this good as a view method or we should have a separate one for usdc(approve)
+    //TODO: better ui
+    function quoteUSDC_BPT(uint256 symmAmount) public view returns(uint256, uint256){
         uint256[] memory balancesLiveScaled18 = IPool(poolAddress).getCurrentLiveBalances();
         uint256 bptBalance = IPool(poolAddress).totalSupply();
         uint256 symmBalance = balancesLiveScaled18[0];

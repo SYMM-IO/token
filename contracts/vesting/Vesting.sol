@@ -15,29 +15,28 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, Liquidity
         uint256 totalTime;
         uint256 totalAmount;
         uint256 claimedAmount;
-        ERC20 token;
+        address token;
     }
 
     mapping (address => VestingPlan) public symmVestingPlans;
-    mapping (address => VestingPlan) public BPTVestingPlans;
+    mapping (address => VestingPlan) public LPVestingPlans;
 
     address public feeCollector;
 
     function initialize(address admin) public initializer{
         __AccessControlEnumerable_init();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(ADMIN_ROLE, admin); //Check: should they be different
+        _grantRole(ADMIN_ROLE, admin);
     }
 
     function setSymmTokenAmount(address user, uint256 amount) external onlyRole(ADMIN_ROLE){
         VestingPlan memory vestingPlan = symmVestingPlans[user];
-        require(amount >= vestingPlan.claimedAmount, "Requested amount exceeds claimed amount of the user");//Check claimed or unlocked
-//        symmVestingPlans[user].totalAmount = amount;
+        require(amount >= _getTotalUnlocked(vestingPlan), "Requested amount exceeds claimed amount of the user");
         uint256 newTotalTime = _getNewTotalTime(vestingPlan);
         _updateVestingPlan(vestingPlan, block.timestamp, newTotalTime, amount);
     }
 
-    function claimSymm() external{ //claim with amount?
+    function claimSymm() external{
         _claimSymm(msg.sender);
     }
 
@@ -45,69 +44,60 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, Liquidity
         _claimSymm(user);
     }
 
-    //amount: before halving
-    function claimLockedSymm(uint256 amount) external { //Do we have to claim the remained tokens for the user
+    //TODO: change name
+    function claimLockedSymm(uint256 amount) external {
         VestingPlan memory vestingPlan = symmVestingPlans[msg.sender];
-        uint256 lockedSymmAmount = vestingPlan.totalAmount - _getTotalUnlocked(vestingPlan);
-        require(lockedSymmAmount >= amount, "requested amount exceeds total locked amount");
-        uint256 newTotalAmount = vestingPlan.totalAmount - amount;
-        uint256 newTotalTime = _getNewTotalTime(vestingPlan);
-        _updateVestingPlan(vestingPlan, block.timestamp, newTotalTime, newTotalAmount);
-        vestingPlan.token.transfer(msg.sender, amount/2);
-        vestingPlan.token.transfer(feeCollector, lockedSymmAmount-(amount/2));
+        _adjustVestingPlan(vestingPlan, amount);
+        _claimSymm(msg.sender);
+        IERC20(vestingPlan.token).transfer(msg.sender, amount/2);
+        IERC20(vestingPlan.token).transfer(feeCollector, amount/2);
     }
 
-    function _claimSymm(address user) internal { //Check should we have some amount that can be freed without time
-        uint256 availableAmount = getSymmClaimableAmount(user);
+    function _claimSymm(address user) internal {
+        uint256 availableAmount = getClaimableSymmAmount(user);
         VestingPlan memory vestingPlan = symmVestingPlans[user];
-//        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
-        vestingPlan.claimedAmount += availableAmount; //Check the compiler version should avoid O.F.
-        //FIX: mint or transfer
-        vestingPlan.token.transfer(user, availableAmount);
-    }
-
-    function claimBPT() external{
-        _claimBPT(msg.sender);
-    }
-
-    function claimBPTFor(address user) external onlyRole(ADMIN_ROLE){
-        _claimBPT(user);
-    }
-
-    //claimLockedBPT?
-
-    function _claimBPT(address user) internal {
-        uint256 availableAmount = getBPTClaimableAmount(user);
-        VestingPlan memory vestingPlan = BPTVestingPlans[user];
-//        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
         vestingPlan.claimedAmount += availableAmount;
-        vestingPlan.token.transfer(user, availableAmount);
+        IERC20(vestingPlan.token).transfer(user, availableAmount);
+    }
+
+    function claimLP() external{
+        _claimLP(msg.sender);
+    }
+
+    function claimLPFor(address user) external onlyRole(ADMIN_ROLE){
+        _claimLP(user);
+    }
+
+    //claimLockedLP?
+
+    function _claimLP(address user) internal {
+        uint256 availableAmount = getClaimableLPAmount(user);
+        VestingPlan memory vestingPlan = LPVestingPlans[user];
+        vestingPlan.claimedAmount += availableAmount;
+        IERC20(vestingPlan.token).transfer(user, availableAmount);
     }
 
     function addLiquidity(uint256 amount) external returns(uint256[] memory, uint256){
         _claimSymm(msg.sender);
         VestingPlan memory symmVestingPlan = symmVestingPlans[msg.sender];
-        require(symmVestingPlan.totalAmount - _getTotalUnlocked(symmVestingPlan) >= amount, "requested amount exceeds total locked amount");
-        uint256 newTotalTime = _getNewTotalTime(symmVestingPlan);
-        _updateVestingPlan(symmVestingPlan, block.timestamp, newTotalTime, symmVestingPlan.totalAmount - amount);
-        (uint256[] memory amountsIn, uint256 BPTAmountOut) = _addLiquidity(amount);
-        VestingPlan memory newBPTVestingPlan;
-        uint256 bptTotalTime = _getNewTotalTime(symmVestingPlan); //Check bpttotaltime = now to symmtotaltime
-        _updateVestingPlan(newBPTVestingPlan, block.timestamp, bptTotalTime, BPTAmountOut);
-        return (amountsIn, BPTAmountOut);
+        _adjustVestingPlan(symmVestingPlan, amount);
+        (uint256[] memory amountsIn, uint256 LPAmountOut) = _addLiquidity(amount);
+        VestingPlan memory newLPVestingPlan;
+        uint256 LPTotalTime = _getNewTotalTime(symmVestingPlan);
+        _updateVestingPlan(newLPVestingPlan, block.timestamp, LPTotalTime, LPAmountOut);
+        return (amountsIn, LPAmountOut);
     }
 
-    function setPoolAddress(address _poolAddress) external onlyRole(ADMIN_ROLE){
-        _setPoolAddress(_poolAddress);
-        //Check event?
+    //TODO: better name?
+    function _adjustVestingPlan(VestingPlan memory vestingPlan, uint256 amount) internal{
+        uint256 lockedSymmAmount = vestingPlan.totalAmount - _getTotalUnlocked(vestingPlan);
+        require(lockedSymmAmount >= amount, "requested amount exceeds total locked amount");
+        uint256 newTotalAmount = vestingPlan.totalAmount - amount;
+        uint256 newTotalTime = _getNewTotalTime(vestingPlan);
+        _updateVestingPlan(vestingPlan, block.timestamp, newTotalTime, newTotalAmount);
     }
 
-    function setRouterAddress(address _routerAddress) external onlyRole(ADMIN_ROLE){
-        _setRouterAddress(_routerAddress);
-        //Check event?
-    }
-
-    function getSymmClaimableAmount(address user) public view returns(uint256){
+    function getClaimableSymmAmount(address user) public view returns(uint256){
         VestingPlan memory vestingPlan = symmVestingPlans[user];
         uint256 totalUnlocked = _getTotalUnlocked(vestingPlan);
         uint256 availableAmount = 0;
@@ -116,10 +106,9 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, Liquidity
         return availableAmount;
     }
 
-    function getBPTClaimableAmount(address user) public view returns(uint256){
-        VestingPlan memory vestingPlan = BPTVestingPlans[user];
+    function getClaimableLPAmount(address user) public view returns(uint256){
+        VestingPlan memory vestingPlan = LPVestingPlans[user];
         uint256 availableAmount = _getTotalUnlocked(vestingPlan);
-//        if (totalUnlocked > vestingPlan.claimedAmount) //Since tokenAmount is not going to change!
         availableAmount -= vestingPlan.claimedAmount;
         return availableAmount;
     }
@@ -137,7 +126,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, Liquidity
         return totalUnlocked;
     }
 
-    //TODO: byValue->byReference
+    //TODO: byValue->byReference OR different design
     function _updateVestingPlan(VestingPlan memory vestingPlan, uint256 startTime, uint256 totalTime, uint256 totalAmount) internal view{
         vestingPlan.startTime = startTime;
         vestingPlan.totalTime = totalTime;
@@ -148,5 +137,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, Liquidity
     function _getNewTotalTime(VestingPlan memory vestingPlan) internal view returns(uint256){
         return vestingPlan.startTime + vestingPlan.totalAmount - block.timestamp;
     }
+
+    //TODO: reward claim
 }
 
