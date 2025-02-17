@@ -4,12 +4,14 @@ pragma solidity ^0.8.27;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import "../token/symm.sol";
+import "./LiquidityHandler.sol";
 
-contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
+contract Vesting is Initializable, AccessControlEnumerableUpgradeable, LiquidityHandler{
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     mapping (address => uint256) public tokenAmounts;
     mapping (address => uint256) public claimedAmounts;
+    mapping (address => uint256) public symmLPOut;
 
     uint256 public totalTime;
     uint256 public startTime;
@@ -38,7 +40,26 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
         _claim(amount, user);
     }
 
-    function getAvailableAmount(address user) public view returns(uint256){
+
+    function setPoolAddress(address _poolAddress) external onlyRole(ADMIN_ROLE){
+        _setPoolAddress(_poolAddress);
+        //Check event?
+    }
+
+    function setRouterAddress(address _routerAddress) external onlyRole(ADMIN_ROLE){
+        _setRouterAddress(_routerAddress);
+        //Check event?
+    }
+
+    function _claim(uint256 amount, address user) internal { //Check should we have some amount that can be freed without time
+        uint256 availableAmount = getClaimableAmount(user);
+        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
+        claimedAmounts[user] += amount; //Check the compiler version should avoid O.F.
+        //FIX: mint or transfer
+        Symmio(symmAddress).mint(user, amount);
+    }
+
+    function getClaimableAmount(address user) public view returns(uint256){
         uint256 endTime = block.timestamp;
         if(endTime > startTime + totalTime)
             endTime = startTime + totalTime;
@@ -52,12 +73,5 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable{
         return availableAmount;
     }
 
-    function _claim(uint256 amount, address user) internal { //Check should we have some amount that can be freed without time
-        uint256 availableAmount = getAvailableAmount(user);
-        require(availableAmount >= amount, "Requested amount exceeds available amount possible to claim");
-        claimedAmounts[user] += amount; //Check the compiler version should avoid O.F.
-        //FIX: mint or transfer
-        Symmio(symmAddress).mint(user, amount);
-    }
 }
 
