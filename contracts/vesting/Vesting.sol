@@ -173,6 +173,13 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		_claimLockedToken(token, msg.sender, amount);
 	}
 
+	/// @notice Claims locked tokens for the caller by percentage.
+	/// @param token Address of the token.
+	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
+	function claimLockedTokenByPercentage(address token, uint256 percentage) external whenNotPaused {
+		_claimLockedToken(token, msg.sender, (getLockedAmountsForToken(msg.sender, token) * percentage) / 1e18);
+	}
+
 	/// @notice Claims locked tokens for a specified user.
 	/// @dev Only accounts with OPERATOR_ROLE can call this function.
 	/// @param token Address of the token.
@@ -180,6 +187,15 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param amount Amount of locked tokens to claim.
 	function claimLockedTokenFor(address token, address user, uint256 amount) external onlyRole(OPERATOR_ROLE) whenNotPaused {
 		_claimLockedToken(token, user, amount);
+	}
+
+	/// @notice Claims locked tokens for a specified user by percentage.
+	/// @dev Only accounts with OPERATOR_ROLE can call this function.
+	/// @param token Address of the token.
+	/// @param user Address of the user.
+	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
+	function claimLockedTokenForByPercentage(address token, address user, uint256 percentage) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+		_claimLockedToken(token, user, (getLockedAmountsForToken(user, token) * percentage) / 1e18);
 	}
 
 	//--------------------------------------------------------------------------
@@ -212,5 +228,33 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		IERC20(token).transfer(user, amount - penalty);
 		IERC20(token).transfer(lockedClaimPenaltyReceiver, penalty);
 		emit LockedTokenClaimed(token, user, amount, penalty);
+	}
+
+	//--------------------------------------------------------------------------
+	// Views
+	//--------------------------------------------------------------------------
+
+	/// @notice Returns the amount of tokens that are still locked for a user
+	/// @param user Address of the user to check
+	/// @param token Address of the token
+	/// @return The amount of tokens still locked in the user's vesting schedule
+	function getLockedAmountsForToken(address user, address token) public view returns (uint256) {
+		return vestingPlans[token][user].lockedAmount();
+	}
+
+	/// @notice Returns the amount of tokens that are currently claimable by a user
+	/// @param user Address of the user to check
+	/// @param token Address of the token
+	/// @return The amount of tokens that can be claimed right now
+	function getClaimableAmountsForToken(address user, address token) public view returns (uint256) {
+		return vestingPlans[token][user].claimable();
+	}
+
+	/// @notice Returns the amount of tokens that have been unlocked according to the vesting schedule
+	/// @param user Address of the user to check
+	/// @param token Address of the token
+	/// @return The total amount of tokens that have been unlocked (claimed and unclaimed)
+	function getUnlockedAmountForToken(address user, address token) public view returns (uint256) {
+		return vestingPlans[token][user].unlockedAmount();
 	}
 }
