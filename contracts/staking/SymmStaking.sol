@@ -147,6 +147,8 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		__ReentrancyGuard_init();
 		__Pausable_init();
 
+		if (admin == address(0)) revert ZeroAddress();
+
 		_grantRole(DEFAULT_ADMIN_ROLE, admin);
 		_grantRole(REWARD_MANAGER_ROLE, admin);
 		_grantRole(PAUSER_ROLE, admin);
@@ -260,19 +262,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	}
 
 	/**
-	 * @notice Allows admin to claim rewards on behalf of a user.
-	 * @param user The user address for which to claim rewards.
-	 */
-	function claimFor(address user) external nonReentrant onlyRole(REWARD_MANAGER_ROLE) whenNotPaused {
-		_updateRewardsStates(user);
-		_claimRewardsFor(user);
-	}
-
-	//--------------------------------------------------------------------------
-	// Restricted Functions
-	//--------------------------------------------------------------------------
-
-	/**
 	 * @notice Notifies the contract about new reward amounts.
 	 * @param tokens Array of reward token addresses.
 	 * @param amounts Array of reward amounts corresponding to each token.
@@ -294,6 +283,19 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			_addRewardsForToken(token, amount);
 		}
 		emit RewardNotified(tokens, amounts);
+	}
+
+	//--------------------------------------------------------------------------
+	// Restricted Functions
+	//--------------------------------------------------------------------------
+
+	/**
+	 * @notice Allows admin to claim rewards on behalf of a user.
+	 * @param user The user address for which to claim rewards.
+	 */
+	function claimFor(address user) external nonReentrant onlyRole(REWARD_MANAGER_ROLE) whenNotPaused {
+		_updateRewardsStates(user);
+		_claimRewardsFor(user);
 	}
 
 	/**
