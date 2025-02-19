@@ -55,7 +55,7 @@ contract SymmVesting is Vesting {
 	/// @param amount The amount of SYMM to use for adding liquidity.
 	/// @return amountsIn Array of token amounts used (SYMM and USDC).
 	/// @return lpAmount The amount of LP tokens minted.
-	function addLiquidity(uint256 amount) external whenNotPaused returns (uint256[] memory amountsIn, uint256 lpAmount) {
+	function addLiquidity(uint256 amount) external whenNotPaused nonReentrant returns (uint256[] memory amountsIn, uint256 lpAmount) {
 		// Claim any unlocked SYMM tokens first.
 		_claimUnlockedToken(SYMM, msg.sender);
 
@@ -126,6 +126,4 @@ contract SymmVesting is Vesting {
 		usdcAmount = (symmRatio * usdcBalance) / 1e18;
 		lpAmount = (symmRatio * totalSupply) / 1e18;
 	}
-
-    //TODO: Claim Fees
 }

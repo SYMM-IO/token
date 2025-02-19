@@ -7,9 +7,10 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 /// @title Vesting Contract
-contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
+contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
 	using VestingPlanOps for VestingPlan;
 
@@ -71,6 +72,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	function __vesting_init(address admin, uint256 _lockedClaimPenalty, address _lockedClaimPenaltyReceiver) public initializer {
 		__AccessControlEnumerable_init();
 		__Pausable_init();
+		__ReentrancyGuard_init();
 
 		lockedClaimPenalty = _lockedClaimPenalty;
 		lockedClaimPenaltyReceiver = _lockedClaimPenaltyReceiver;
@@ -184,7 +186,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @notice Internal function to claim unlocked tokens.
 	/// @param token Address of the token.
 	/// @param user Address of the user.
-	function _claimUnlockedToken(address token, address user) internal {
+	function _claimUnlockedToken(address token, address user) internal nonReentrant {
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
 		uint256 claimableAmount = vestingPlan.claimable();
 		vestingPlan.claimedAmount += claimableAmount;
@@ -196,7 +198,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	/// @param amount Amount of locked tokens to claim.
-	function _claimLockedToken(address token, address user, uint256 amount) internal {
+	function _claimLockedToken(address token, address user, uint256 amount) internal nonReentrant {
 		// First, claim any unlocked tokens.
 		_claimUnlockedToken(token, user);
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
