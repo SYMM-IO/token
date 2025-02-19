@@ -25,7 +25,7 @@ contract SymmVesting is Vesting {
 	event LiquidityAdded(address indexed user, uint256 symmAmount, uint256 usdcAmount, uint256 lpAmount);
 
 	//--------------------------------------------------------------------------
-	// Error
+	// Errors
 	//--------------------------------------------------------------------------
 
 	error SlippageExceeded();
