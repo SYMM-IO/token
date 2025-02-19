@@ -21,6 +21,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	error MismatchArrays();
 	error AlreadyClaimedMoreThanThis();
 	error InvalidAmount();
+	error ZeroAddress();
 
 	//--------------------------------------------------------------------------
 	// Events
@@ -76,6 +77,8 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 
 		lockedClaimPenalty = _lockedClaimPenalty;
 		lockedClaimPenaltyReceiver = _lockedClaimPenaltyReceiver;
+
+		if (admin == address(0) || _lockedClaimPenaltyReceiver == address(0)) revert ZeroAddress();
 
 		_grantRole(DEFAULT_ADMIN_ROLE, admin);
 		_grantRole(SETTER_ROLE, admin);
