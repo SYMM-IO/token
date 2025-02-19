@@ -1,143 +1,211 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../token/symm.sol";
-import "./LiquidityHandler.sol";
+import "./libraries/LibVestingPlan.sol";
+import { AccessControlEnumerableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
-contract Vesting is Initializable, AccessControlEnumerableUpgradeable, LiquidityHandler{
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+/// @title Vesting Contract
+contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
+	using SafeERC20 for IERC20;
+	using VestingPlanOps for VestingPlan;
 
-    struct VestingPlan{
-        uint256 startTime;
-        uint256 totalTime;
-        uint256 totalAmount;
-        uint256 claimedAmount;
-        address token;
-    }
+	//--------------------------------------------------------------------------
+	// Errors
+	//--------------------------------------------------------------------------
 
-    mapping (address => VestingPlan) public symmVestingPlans;
-    mapping (address => VestingPlan) public LPVestingPlans;
+	error MismatchArrays();
+	error AlreadyClaimedMoreThanThis();
+	error InvalidAmount();
 
-    address public feeCollector;
+	//--------------------------------------------------------------------------
+	// Events
+	//--------------------------------------------------------------------------
 
-    function initialize(address admin) public initializer{
-        __AccessControlEnumerable_init();
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(ADMIN_ROLE, admin);
-    }
+	/// @notice Emitted when a vesting plan is set up.
+	event VestingPlanSetup(address indexed token, address indexed user, uint256 amount, uint256 startTime, uint256 endTime);
 
-    function setSymmTokenAmount(address user, uint256 amount) external onlyRole(ADMIN_ROLE){
-        VestingPlan memory vestingPlan = symmVestingPlans[user];
-        require(amount >= _getTotalUnlocked(vestingPlan), "Requested amount exceeds claimed amount of the user");
-        uint256 newTotalTime = _getNewTotalTime(vestingPlan);
-        _updateVestingPlan(vestingPlan, block.timestamp, newTotalTime, amount);
-    }
+	/// @notice Emitted when a vesting plan is reset.
+	event VestingPlanReset(address indexed token, address indexed user, uint256 newAmount);
 
-    function claimSymm() external{
-        _claimSymm(msg.sender);
-    }
+	/// @notice Emitted when unlocked tokens are claimed.
+	event UnlockedTokenClaimed(address indexed token, address indexed user, uint256 amount);
 
-    function claimSymmFor(address user) external onlyRole(ADMIN_ROLE){
-        _claimSymm(user);
-    }
+	/// @notice Emitted when locked tokens are claimed.
+	event LockedTokenClaimed(address indexed token, address indexed user, uint256 amount, uint256 penalty);
 
-    //TODO: change name
-    function claimLockedSymm(uint256 amount) external {
-        VestingPlan memory vestingPlan = symmVestingPlans[msg.sender];
-        _adjustVestingPlan(vestingPlan, amount);
-        _claimSymm(msg.sender);
-        IERC20(vestingPlan.token).transfer(msg.sender, amount/2);
-        IERC20(vestingPlan.token).transfer(feeCollector, amount/2);
-    }
+	//--------------------------------------------------------------------------
+	// Roles
+	//--------------------------------------------------------------------------
 
-    function _claimSymm(address user) internal {
-        uint256 availableAmount = getClaimableSymmAmount(user);
-        VestingPlan memory vestingPlan = symmVestingPlans[user];
-        vestingPlan.claimedAmount += availableAmount;
-        IERC20(vestingPlan.token).transfer(user, availableAmount);
-    }
+	bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
+	bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
-    function claimLP() external{
-        _claimLP(msg.sender);
-    }
+	//--------------------------------------------------------------------------
+	// State Variables
+	//--------------------------------------------------------------------------
 
-    function claimLPFor(address user) external onlyRole(ADMIN_ROLE){
-        _claimLP(user);
-    }
+	// Mapping: token => user => vesting plan
+	mapping(address => mapping(address => VestingPlan)) public vestingPlans;
 
-    //claimLockedLP?
+	uint256 public lockedClaimPenalty;
+	address public lockedClaimPenaltyReceiver;
 
-    function _claimLP(address user) internal {
-        uint256 availableAmount = getClaimableLPAmount(user);
-        VestingPlan memory vestingPlan = LPVestingPlans[user];
-        vestingPlan.claimedAmount += availableAmount;
-        IERC20(vestingPlan.token).transfer(user, availableAmount);
-    }
+	/// @dev This reserved space is put in place to allow future versions to add new variables
+	/// without shifting down storage in the inheritance chain.
+	uint256[50] private __gap;
 
-    function addLiquidity(uint256 amount) external returns(uint256[] memory, uint256){
-        _claimSymm(msg.sender);
-        VestingPlan memory symmVestingPlan = symmVestingPlans[msg.sender];
-        _adjustVestingPlan(symmVestingPlan, amount);
-        (uint256[] memory amountsIn, uint256 LPAmountOut) = _addLiquidity(amount);
-        VestingPlan memory newLPVestingPlan;
-        uint256 LPTotalTime = _getNewTotalTime(symmVestingPlan);
-        _updateVestingPlan(newLPVestingPlan, block.timestamp, LPTotalTime, LPAmountOut);
-        return (amountsIn, LPAmountOut);
-    }
+	//--------------------------------------------------------------------------
+	// Initialization
+	//--------------------------------------------------------------------------
 
-    //TODO: better name?
-    function _adjustVestingPlan(VestingPlan memory vestingPlan, uint256 amount) internal{
-        uint256 lockedSymmAmount = vestingPlan.totalAmount - _getTotalUnlocked(vestingPlan);
-        require(lockedSymmAmount >= amount, "requested amount exceeds total locked amount");
-        uint256 newTotalAmount = vestingPlan.totalAmount - amount;
-        uint256 newTotalTime = _getNewTotalTime(vestingPlan);
-        _updateVestingPlan(vestingPlan, block.timestamp, newTotalTime, newTotalAmount);
-    }
+	/// @notice Initializes the vesting contract.
+	/// @param admin Address to receive the admin and role assignments.
+	/// @param _lockedClaimPenalty Penalty rate (scaled by 1e18) for locked token claims.
+	/// @param _lockedClaimPenaltyReceiver Address that receives the penalty.
+	function __vesting_init(address admin, uint256 _lockedClaimPenalty, address _lockedClaimPenaltyReceiver) public initializer {
+		__AccessControlEnumerable_init();
+		__Pausable_init();
 
-    function getClaimableSymmAmount(address user) public view returns(uint256){
-        VestingPlan memory vestingPlan = symmVestingPlans[user];
-        uint256 totalUnlocked = _getTotalUnlocked(vestingPlan);
-        uint256 availableAmount = 0;
-        if (totalUnlocked > vestingPlan.claimedAmount)
-            availableAmount = totalUnlocked - vestingPlan.claimedAmount;
-        return availableAmount;
-    }
+		lockedClaimPenalty = _lockedClaimPenalty;
+		lockedClaimPenaltyReceiver = _lockedClaimPenaltyReceiver;
 
-    function getClaimableLPAmount(address user) public view returns(uint256){
-        VestingPlan memory vestingPlan = LPVestingPlans[user];
-        uint256 availableAmount = _getTotalUnlocked(vestingPlan);
-        availableAmount -= vestingPlan.claimedAmount;
-        return availableAmount;
-    }
+		_grantRole(DEFAULT_ADMIN_ROLE, admin);
+		_grantRole(SETTER_ROLE, admin);
+		_grantRole(PAUSER_ROLE, admin);
+		_grantRole(UNPAUSER_ROLE, admin);
+		_grantRole(OPERATOR_ROLE, admin);
+	}
 
-    function _getTotalUnlocked(VestingPlan memory vestingPlan) internal view returns (uint256){
-        uint256 endTime = block.timestamp;
-        (uint256 startTime, uint256 totalTime) = (vestingPlan.startTime, vestingPlan.totalTime);
-        if(endTime > startTime + totalTime)
-            endTime = startTime + totalTime;
-        uint256 totalUnlocked =
-            (
-                (vestingPlan.totalAmount * 1e18 / totalTime) *
-                (endTime - startTime)
-            ) / 1e18;
-        return totalUnlocked;
-    }
+	//--------------------------------------------------------------------------
+	// Pausing / Unpausing
+	//--------------------------------------------------------------------------
 
-    //TODO: byValue->byReference OR different design
-    function _updateVestingPlan(VestingPlan memory vestingPlan, uint256 startTime, uint256 totalTime, uint256 totalAmount) internal view{
-        vestingPlan.startTime = startTime;
-        vestingPlan.totalTime = totalTime;
-        vestingPlan.totalAmount = totalAmount;
-        vestingPlan.claimedAmount = 0;
-    }
+	/// @notice Pauses the contract, restricting state-changing functions.
+	/// @dev Only accounts with PAUSER_ROLE can call this function.
+	function pause() external onlyRole(PAUSER_ROLE) {
+		_pause();
+	}
 
-    function _getNewTotalTime(VestingPlan memory vestingPlan) internal view returns(uint256){
-        return vestingPlan.startTime + vestingPlan.totalAmount - block.timestamp;
-    }
+	/// @notice Unpauses the contract, allowing state-changing functions.
+	/// @dev Only accounts with UNPAUSER_ROLE can call this function.
+	function unpause() external onlyRole(UNPAUSER_ROLE) {
+		_unpause();
+	}
 
-    //TODO: reward claim
+	//--------------------------------------------------------------------------
+	// Vesting Plan Functions
+	//--------------------------------------------------------------------------
+
+	/// @notice Resets vesting plans for multiple users.
+	/// @dev Reverts if the users and amounts arrays have different lengths or if any user's claimed amount exceeds the new amount.
+	/// @param token Address of the token.
+	/// @param users Array of user addresses.
+	/// @param amounts Array of new token amounts.
+	function resetVestingPlans(address token, address[] calldata users, uint256[] calldata amounts) external onlyRole(SETTER_ROLE) whenNotPaused {
+		if (users.length != amounts.length) revert MismatchArrays();
+		uint256 len = users.length;
+		for (uint256 i = 0; i < len; i++) {
+			address user = users[i];
+			uint256 amount = amounts[i];
+			// Claim any unlocked tokens before resetting.
+			_claimUnlockedToken(token, user);
+			VestingPlan storage vestingPlan = vestingPlans[token][user];
+			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
+			vestingPlan.resetAmount(amount);
+			emit VestingPlanReset(token, user, amount);
+		}
+	}
+
+	/// @notice Sets up vesting plans for multiple users.
+	/// @dev Reverts if the users and amounts arrays have different lengths.
+	/// @param token Address of the token.
+	/// @param startTime Vesting start time.
+	/// @param endTime Vesting end time.
+	/// @param users Array of user addresses.
+	/// @param amounts Array of token amounts.
+	function setupVestingPlans(
+		address token,
+		uint256 startTime,
+		uint256 endTime,
+		address[] calldata users,
+		uint256[] calldata amounts
+	) external onlyRole(SETTER_ROLE) whenNotPaused {
+		if (users.length != amounts.length) revert MismatchArrays();
+		uint256 len = users.length;
+		for (uint256 i = 0; i < len; i++) {
+			address user = users[i];
+			uint256 amount = amounts[i];
+			VestingPlan storage vestingPlan = vestingPlans[token][user];
+			vestingPlan.setup(amount, startTime, endTime);
+			emit VestingPlanSetup(token, user, amount, startTime, endTime);
+		}
+	}
+
+	/// @notice Claims unlocked tokens for the caller.
+	/// @param token Address of the token.
+	function claimUnlockedToken(address token) external whenNotPaused {
+		_claimUnlockedToken(token, msg.sender);
+	}
+
+	/// @notice Claims unlocked tokens for a specified user.
+	/// @dev Only accounts with OPERATOR_ROLE can call this function.
+	/// @param token Address of the token.
+	/// @param user Address of the user.
+	function claimUnlockedTokenFor(address token, address user) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+		_claimUnlockedToken(token, user);
+	}
+
+	/// @notice Claims locked tokens for the caller.
+	/// @param token Address of the token.
+	/// @param amount Amount of locked tokens to claim.
+	function claimLockedToken(address token, uint256 amount) external whenNotPaused {
+		_claimLockedToken(token, msg.sender, amount);
+	}
+
+	/// @notice Claims locked tokens for a specified user.
+	/// @dev Only accounts with OPERATOR_ROLE can call this function.
+	/// @param token Address of the token.
+	/// @param user Address of the user.
+	/// @param amount Amount of locked tokens to claim.
+	function claimLockedTokenFor(address token, address user, uint256 amount) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+		_claimLockedToken(token, user, amount);
+	}
+
+	//--------------------------------------------------------------------------
+	// Internal Functions
+	//--------------------------------------------------------------------------
+
+	/// @notice Internal function to claim unlocked tokens.
+	/// @param token Address of the token.
+	/// @param user Address of the user.
+	function _claimUnlockedToken(address token, address user) internal {
+		VestingPlan storage vestingPlan = vestingPlans[token][user];
+		uint256 claimableAmount = vestingPlan.claimable();
+		vestingPlan.claimedAmount += claimableAmount;
+		IERC20(token).transfer(user, claimableAmount);
+		emit UnlockedTokenClaimed(token, user, claimableAmount);
+	}
+
+	/// @notice Internal function to claim locked tokens.
+	/// @param token Address of the token.
+	/// @param user Address of the user.
+	/// @param amount Amount of locked tokens to claim.
+	function _claimLockedToken(address token, address user, uint256 amount) internal {
+		// First, claim any unlocked tokens.
+		_claimUnlockedToken(token, user);
+		VestingPlan storage vestingPlan = vestingPlans[token][user];
+		if (vestingPlan.lockedAmount() < amount) revert InvalidAmount();
+		// Reset the vesting plan to reduce the locked amount.
+		vestingPlan.resetAmount(vestingPlan.lockedAmount() - amount);
+		uint256 penalty = (amount * lockedClaimPenalty) / 1e18;
+		IERC20(token).transfer(user, amount - penalty);
+		IERC20(token).transfer(lockedClaimPenaltyReceiver, penalty);
+		emit LockedTokenClaimed(token, user, amount, penalty);
+	}
 }
-
