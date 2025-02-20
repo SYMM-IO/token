@@ -55,6 +55,9 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	// Mapping: token => user => vesting plan
 	mapping(address => mapping(address => VestingPlan)) public vestingPlans;
 
+	// Mapping: token => total vested amount of that token in the contract
+	mapping(address => uint256) public totalVested;
+
 	uint256 public lockedClaimPenalty;
 	address public lockedClaimPenaltyReceiver;
 
@@ -122,7 +125,9 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 			_claimUnlockedToken(token, user);
 			VestingPlan storage vestingPlan = vestingPlans[token][user];
 			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
+			uint256 oldTotal = vestingPlan.unlockedAmount() + vestingPlan.lockedAmount();
 			vestingPlan.resetAmount(amount);
+			totalVested[token] = totalVested[token] - oldTotal + amount;
 			emit VestingPlanReset(token, user, amount);
 		}
 	}
@@ -146,6 +151,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		for (uint256 i = 0; i < len; i++) {
 			address user = users[i];
 			uint256 amount = amounts[i];
+        	totalVested[token] += amount;
 			VestingPlan storage vestingPlan = vestingPlans[token][user];
 			vestingPlan.setup(amount, startTime, endTime);
 			emit VestingPlanSetup(token, user, amount, startTime, endTime);
@@ -208,6 +214,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	function _claimUnlockedToken(address token, address user) internal nonReentrant {
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
 		uint256 claimableAmount = vestingPlan.claimable();
+		totalVested[token] -= claimableAmount;
 		vestingPlan.claimedAmount += claimableAmount;
 		IERC20(token).transfer(user, claimableAmount);
 		emit UnlockedTokenClaimed(token, user, claimableAmount);
@@ -224,6 +231,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		if (vestingPlan.lockedAmount() < amount) revert InvalidAmount();
 		// Reset the vesting plan to reduce the locked amount.
 		vestingPlan.resetAmount(vestingPlan.lockedAmount() - amount);
+		totalVested[token] -= amount;
 		uint256 penalty = (amount * lockedClaimPenalty) / 1e18;
 		IERC20(token).transfer(user, amount - penalty);
 		IERC20(token).transfer(lockedClaimPenaltyReceiver, penalty);
