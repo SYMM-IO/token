@@ -18,9 +18,8 @@ task("deploy:Vesting", "Deploys the Vesting contract")
 		})
 		const vestingContract = await upgrades.deployProxy(VestingFactory, [admin, lockedClaimPenaltyReceiver], {
 			unsafeAllow: ["external-library-linking"],
-			initializer: "initialize"
+			initializer: "initialize",
 		})
-		console.log("Before Wait")
 		await vestingContract.waitForDeployment()
 
 		console.log(`SymmVesting Contract deployed at: ${await vestingContract.getAddress()}`)
