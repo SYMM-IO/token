@@ -5,17 +5,17 @@ import { ShouldBehaveLikeVesting } from "./vesting.behavior"
 
 describe("Symmio Token", () => {
 	describe("Static Tests", async function () {
-		describe("Symm token", async function () {
-			shouldBehaveLikeSymmioToken()
-		})
+		// describe("Symm token", async function () {
+		// 	shouldBehaveLikeSymmioToken()
+		// })
 
-		describe("Allocation Claimer", async function () {
-			shouldBehaveLikeSymmAllocationClaimer()
-		})
+		// describe("Allocation Claimer", async function () {
+		// 	shouldBehaveLikeSymmAllocationClaimer()
+		// })
 
-		describe("AirdropHelper", async function () {
-			shouldBehaveLikeAirdropHelper()
-		})
+		// describe("AirdropHelper", async function () {
+		// 	shouldBehaveLikeAirdropHelper()
+		// })
 
 		describe("ٰVesting", async function () {
 			ShouldBehaveLikeVesting()

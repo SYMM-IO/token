@@ -115,7 +115,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param users Array of user addresses.
 	/// @param amounts Array of new token amounts.
-	function resetVestingPlans(address token, address[] calldata users, uint256[] calldata amounts) external onlyRole(SETTER_ROLE) whenNotPaused {
+	function resetVestingPlans(address token, address[] calldata users, uint256[] calldata amounts) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
 		if (users.length != amounts.length) revert MismatchArrays();
 		uint256 len = users.length;
 		for (uint256 i = 0; i < len; i++) {
@@ -145,7 +145,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		uint256 endTime,
 		address[] calldata users,
 		uint256[] calldata amounts
-	) external onlyRole(SETTER_ROLE) whenNotPaused {
+	) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
 		if (users.length != amounts.length) revert MismatchArrays();
 		uint256 len = users.length;
 		for (uint256 i = 0; i < len; i++) {
@@ -160,7 +160,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 
 	/// @notice Claims unlocked tokens for the caller.
 	/// @param token Address of the token.
-	function claimUnlockedToken(address token) external whenNotPaused {
+	function claimUnlockedToken(address token) external whenNotPaused nonReentrant {
 		_claimUnlockedToken(token, msg.sender);
 	}
 
@@ -168,21 +168,21 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @dev Only accounts with OPERATOR_ROLE can call this function.
 	/// @param token Address of the token.
 	/// @param user Address of the user.
-	function claimUnlockedTokenFor(address token, address user) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+	function claimUnlockedTokenFor(address token, address user) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
 		_claimUnlockedToken(token, user);
 	}
 
 	/// @notice Claims locked tokens for the caller.
 	/// @param token Address of the token.
 	/// @param amount Amount of locked tokens to claim.
-	function claimLockedToken(address token, uint256 amount) external whenNotPaused {
+	function claimLockedToken(address token, uint256 amount) external whenNotPaused nonReentrant {
 		_claimLockedToken(token, msg.sender, amount);
 	}
 
 	/// @notice Claims locked tokens for the caller by percentage.
 	/// @param token Address of the token.
 	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
-	function claimLockedTokenByPercentage(address token, uint256 percentage) external whenNotPaused {
+	function claimLockedTokenByPercentage(address token, uint256 percentage) external whenNotPaused nonReentrant {
 		_claimLockedToken(token, msg.sender, (getLockedAmountsForToken(msg.sender, token) * percentage) / 1e18);
 	}
 
@@ -191,7 +191,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	/// @param amount Amount of locked tokens to claim.
-	function claimLockedTokenFor(address token, address user, uint256 amount) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+	function claimLockedTokenFor(address token, address user, uint256 amount) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
 		_claimLockedToken(token, user, amount);
 	}
 
@@ -200,7 +200,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
-	function claimLockedTokenForByPercentage(address token, address user, uint256 percentage) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+	function claimLockedTokenForByPercentage(address token, address user, uint256 percentage) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
 		_claimLockedToken(token, user, (getLockedAmountsForToken(user, token) * percentage) / 1e18);
 	}
 
@@ -211,7 +211,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @notice Internal function to claim unlocked tokens.
 	/// @param token Address of the token.
 	/// @param user Address of the user.
-	function _claimUnlockedToken(address token, address user) internal nonReentrant {
+	function _claimUnlockedToken(address token, address user) internal {
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
 		uint256 claimableAmount = vestingPlan.claimable();
 		totalVested[token] -= claimableAmount;
@@ -224,7 +224,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	/// @param amount Amount of locked tokens to claim.
-	function _claimLockedToken(address token, address user, uint256 amount) internal nonReentrant {
+	function _claimLockedToken(address token, address user, uint256 amount) internal {
 		// First, claim any unlocked tokens.
 		_claimUnlockedToken(token, user);
 		VestingPlan storage vestingPlan = vestingPlans[token][user];

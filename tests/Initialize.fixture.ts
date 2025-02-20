@@ -1,6 +1,6 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { ethers, run } from "hardhat"
-import { SymmAllocationClaimer, Symmio, Vesting } from "../typechain-types"
+import { SymmAllocationClaimer, Symmio, SymmVesting, Vesting } from "../typechain-types"
 
 export class RunContext {
 	signers!: {
@@ -13,7 +13,7 @@ export class RunContext {
 	}
 	symmioToken!: Symmio
 	claimSymm!: SymmAllocationClaimer
-	vesting!: Vesting
+	vesting!: SymmVesting
 }
 
 export async function initializeFixture(): Promise<RunContext> {
@@ -46,6 +46,8 @@ export async function initializeFixture(): Promise<RunContext> {
 		admin: await context.signers.admin.getAddress(),
 		lockedClaimPenaltyReceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
 	})
+
+	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)
 
 	const roles = [
 		await context.claimSymm.SETTER_ROLE(),
