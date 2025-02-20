@@ -8,7 +8,7 @@ task("deploy:Vesting", "Deploys the Vesting contract")
 		console.log("deploy:Vesting")
 
 		const VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
-		const vestingPlanOps = await upgrades.deployProxy(VestingPlanOps)
+		const vestingPlanOps = await VestingPlanOps.deploy()
 		await vestingPlanOps.waitForDeployment()
 
 		const VestingFactory = await ethers.getContractFactory("SymmVesting", {
