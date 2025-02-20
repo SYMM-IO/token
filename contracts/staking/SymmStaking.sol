@@ -17,9 +17,12 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
 	using SafeERC20 for IERC20;
 
+	/* ========== VARIABLES ========== */
+
+	address public stakingToken;
+
 	/* ========== CONSTANTS ========== */
 
-	address public constant STAKING_TOKEN = 0x800822d361335b4d5F352Dac293cA4128b5B605f;
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
 	
 	bytes32 public constant REWARD_MANAGER_ROLE = keccak256("REWARD_MANAGER_ROLE");
@@ -47,6 +50,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	error ArraysMismatched();
 
 	/// @notice Thrown when there is an already ongoing reward period for this token.
+	//TODO: params
 	error OngoingRewardPeriodForToken(address token, uint256 pendingRewards);
 
 	/// @notice Thrown when the whitelist status is already set.
@@ -130,10 +134,12 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @notice Initializes the staking contract.
 	 * @param admin The admin of the contract.
 	 */
-	function initialize(address admin) external initializer {
+	function initialize(address admin, address _stakingToken) external initializer {
 		__AccessControlEnumerable_init();
 		__ReentrancyGuard_init();
 		__Pausable_init();
+
+		stakingToken = _stakingToken;
 
 		_grantRole(DEFAULT_ADMIN_ROLE, admin);
 		_grantRole(REWARD_MANAGER_ROLE, admin);
@@ -209,7 +215,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (amount == 0) revert ZeroAmount();
 		if (receiver == address(0)) revert ZeroAddress();
 
-		IERC20(STAKING_TOKEN).safeTransferFrom(msg.sender, address(this), amount);
+		IERC20(stakingToken).safeTransferFrom(msg.sender, address(this), amount);
 		totalSupply += amount;
 		balanceOf[receiver] += amount;
 		emit Deposit(msg.sender, amount, receiver);
@@ -227,7 +233,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (to == address(0)) revert ZeroAddress();
 		if (amount > balanceOf[msg.sender]) revert InsufficientBalance(balanceOf[msg.sender], amount);
 
-		IERC20(STAKING_TOKEN).safeTransfer(to, amount);
+		IERC20(stakingToken).safeTransfer(to, amount);
 		totalSupply -= amount;
 		balanceOf[msg.sender] -= amount;
 		emit Withdraw(msg.sender, amount, to);
