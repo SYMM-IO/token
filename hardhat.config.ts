@@ -9,7 +9,7 @@ import "solidity-coverage"
 
 import "./tasks/SymmAllocationClaimer"
 import "./tasks/symmioToken"
-import "./tasks/symmVesting";
+import "./tasks/symmVesting"
 
 dotenv.config()
 
@@ -45,10 +45,10 @@ export const config: HardhatUserConfig = {
 	},
 	networks: {
 		hardhat: {
-			// forking: {
-			// 	url: "",
-			// 	blockNumber: 67892234,
-			// },
+			forking: {
+				url: "https://base.llamarpc.com",
+				blockNumber: 26681141,
+			},
 		},
 		ethereum: {
 			url: "https://ethereum.blockpi.network/v1/rpc/public",
