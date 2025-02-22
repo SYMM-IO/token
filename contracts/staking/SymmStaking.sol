@@ -210,8 +210,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param receiver The address receiving the staking balance.
 	 */
 	function deposit(uint256 amount, address receiver) external nonReentrant whenNotPaused {
-		_updateRewardsStates(receiver);
-
 		if (amount == 0) revert ZeroAmount();
 		if (receiver == address(0)) revert ZeroAddress();
 
@@ -219,6 +217,8 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		totalSupply += amount;
 		balanceOf[receiver] += amount;
 		emit Deposit(msg.sender, amount, receiver);
+
+		_updateRewardsStates(receiver);
 	}
 
 	/**
@@ -227,8 +227,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param to The address receiving the tokens.
 	 */
 	function withdraw(uint256 amount, address to) external nonReentrant whenNotPaused {
-		_updateRewardsStates(msg.sender);
-
 		if (amount == 0) revert ZeroAmount();
 		if (to == address(0)) revert ZeroAddress();
 		if (amount > balanceOf[msg.sender]) revert InsufficientBalance(balanceOf[msg.sender], amount);
