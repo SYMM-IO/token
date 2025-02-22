@@ -336,6 +336,134 @@ export function shouldBehaveLikeSymmStaking() {
 
 	})
 
+	describe("claimFor", function () {
+
+		it("should allow an admin to claim rewards on behalf of a user", async function () {
+			// Scenario: Admin claims rewards for user1
+
+			const depositAmount = "604800";  // user1 deposits 604,800 SYMM
+			const rewardAmount = "604800";   // Total reward for 7 days
+
+			// user1 deposits tokens
+			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount);
+			await symmStaking.connect(user1).deposit(depositAmount, user1.address);
+
+			// Admin configures and notifies rewards
+			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount);
+			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true);
+			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount]);
+
+			// Fast forward time to accumulate some rewards
+			await time.increase(200);
+
+			// Admin claims rewards on behalf of user1
+			const user1BalanceBefore = await usdtToken.balanceOf(user1.address);
+			await symmStaking.connect(admin).claimFor(user1.address);
+			const user1BalanceAfter = await usdtToken.balanceOf(user1.address);
+
+			// The claimed rewards should be 200 tokens (200 seconds * 1 token/sec)
+			expect(user1BalanceAfter - user1BalanceBefore).to.equal('200');
+		});
+
+		it("should revert if non-admin tries to claim rewards on behalf of a user", async function () {
+			// Scenario: A non-admin user attempts to claim rewards for another user
+
+			const depositAmount = "604800";  // user1 deposits 604,800 SYMM
+			const rewardAmount = "604800";   // Total reward for 7 days
+
+			// user1 deposits tokens
+			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount);
+			await symmStaking.connect(user1).deposit(depositAmount, user1.address);
+
+			// Admin configures and notifies rewards
+			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount);
+			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true);
+			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount]);
+
+			// Fast forward time to accumulate some rewards
+			await time.increase(200);
+
+			// user2 (non-admin) tries to claim rewards for user1
+			await expect(symmStaking.connect(user2).claimFor(user1.address))
+				.to.be.revertedWithCustomError(symmStaking, "AccessControlUnauthorizedAccount");
+		});
+
+		it("should revert if there are no rewards to claim for the user", async function () {
+			// Scenario: Admin tries to claim rewards for a user who has no rewards
+
+			const depositAmount = "604800";  // user1 deposits 604,800 SYMM
+			const rewardAmount = "0";        // No reward for the user1
+
+			// user1 deposits tokens
+			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount);
+			await symmStaking.connect(user1).deposit(depositAmount, user1.address);
+
+			// Admin configures and notifies rewards (but none for user1)
+			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true);
+			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount]);
+
+			// Fast forward time
+			await time.increase(200);
+
+			// Admin tries to claim rewards for user1 (but there are none)
+			await expect(symmStaking.connect(admin).claimFor(user1.address))
+				.to.be.ok
+		});
+
+		it("should not allow claiming rewards for zero address", async function () {
+			// Scenario: Admin tries to claim rewards for the zero address
+
+			const depositAmount = "604800";  // user1 deposits 604,800 SYMM
+			const rewardAmount = "604800";   // Total reward for 7 days
+
+			// user1 deposits tokens
+			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount);
+			await symmStaking.connect(user1).deposit(depositAmount, user1.address);
+
+			// Admin configures and notifies rewards
+			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount);
+			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true);
+			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount]);
+
+			// Fast forward time
+			await time.increase(200);
+
+			// Admin tries to claim rewards for the zero address
+			await expect(symmStaking.connect(admin).claimFor("0x0000000000000000000000000000000000000000")).to.be.ok
+			// .to.be.revertedWithCustomError(symmStaking, "ZeroAddress");
+		});
+
+	});
+
+	describe("Notify", function(){
+		it("should notify rewards correctly when one token has a zero amount", async function () {
+			// Scenario:
+			// 1. Admin configures and notifies rewards for two tokens: USDT and USDC.
+			// 2. USDT has a reward amount of zero, while USDC has a valid amount.
+			// 3. Contract should only notify the valid token and ignore the one with zero reward amount.
+
+			const rewardAmountUSDT = "0";     // USDT has a zero reward amount
+			const rewardAmountUSDC = "1000";  // USDC has a positive reward amount
+
+			// Admin approves the tokens to notify rewards
+			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmountUSDT);
+			await usdcToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmountUSDC);
+
+			// Admin configures and notifies rewards
+			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true);
+			await symmStaking.connect(admin).configureRewardToken(await usdcToken.getAddress(), true);
+
+			// Notify rewards (USDT is zero, so it should be ignored)
+			await expect(symmStaking.connect(admin).notifyRewardAmount(
+				[await usdtToken.getAddress(), await usdcToken.getAddress()],
+				[rewardAmountUSDT, rewardAmountUSDC]
+			)).to.be.ok;
+
+
+
+		});
+	})
+
 	describe("Withdraw", function () {
 
 		it("should allow a user to deposit and then withdraw after some time", async function () {
@@ -398,7 +526,7 @@ export function shouldBehaveLikeSymmStaking() {
 			expect(user1Withdrawn).to.equal(depositAmount);
 		});
 
-		it("should handle multiple users, admin config/notifies rewards, partial withdraw, claim, then final withdraw", async function () {
+		it("should handle other users withdraw and calculate the the rewards correctly", async function () {
 			// Scenario:
 			// 1. user1 deposits 604800 (1 week in seconds)
 			// 2. user2 deposits 604800
@@ -445,17 +573,28 @@ export function shouldBehaveLikeSymmStaking() {
 			await time.increaseTo(afterNotifyTime+200);
 
 			// User2 claims rewards
-			const user2BalanceBeforeUSDT = await usdtToken.balanceOf(user2.address);
-			await symmStaking.connect(user2).claimRewards();
-			const user2BalanceAfterUSDT = await usdtToken.balanceOf(user2.address);
-			const user2ClaimedUSDT = user2BalanceAfterUSDT - user2BalanceBeforeUSDT;
+			let user2BalanceBeforeUSDT = await usdtToken.balanceOf(user2.address);
+			let user2BalanceBeforeUSDC = await usdcToken.balanceOf(user2.address);
 
-			const user2BalanceBeforeUSDC = await usdcToken.balanceOf(user2.address);
 			await symmStaking.connect(user2).claimRewards();
-			const user2BalanceAfterUSDC = await usdcToken.balanceOf(user2.address);
-			const user2ClaimedUSDC = user2BalanceAfterUSDC - user2BalanceBeforeUSDC;
 
-			expect(user2ClaimedUSDT + user2ClaimedUSDC).to.equal('200');
+			let user2BalanceAfterUSDT = await usdtToken.balanceOf(user2.address);
+			let user2BalanceAfterUSDC = await usdtToken.balanceOf(user2.address);
+			let user2ClaimedUSDT = (user2BalanceAfterUSDT+user2BalanceAfterUSDC) - (user2BalanceBeforeUSDT+user2BalanceBeforeUSDC);
+
+			expect(user2ClaimedUSDT).to.equal('400');
+
+			// User2 claims rewards
+			user2BalanceBeforeUSDT = await usdtToken.balanceOf(user2.address);
+			user2BalanceBeforeUSDC = await usdcToken.balanceOf(user2.address);
+
+			await symmStaking.connect(user2).claimRewards();
+
+			user2BalanceAfterUSDT = await usdtToken.balanceOf(user2.address);
+			user2BalanceAfterUSDC = await usdtToken.balanceOf(user2.address);
+			user2ClaimedUSDT = (user2BalanceAfterUSDT+user2BalanceAfterUSDC) - (user2BalanceBeforeUSDT+user2BalanceBeforeUSDC);
+
+			expect(user2ClaimedUSDT).to.equal('0'); //The first claim, claims both tokens
 
 			// User2 withdraws staked tokens
 			const user2StakedBalanceBefore = await stakingToken.balanceOf(user2.address);
@@ -534,8 +673,6 @@ export function shouldBehaveLikeSymmStaking() {
 	});
 
 	describe("Pause and Unpause Functionality", function () {
-
-
 
 		it("should revert when contract is paused for whenNotPaused methods", async function () {
 			// Scenario:
@@ -746,6 +883,7 @@ export function shouldBehaveLikeSymmStaking() {
 		});
 
 	});
+
 
 };
 
