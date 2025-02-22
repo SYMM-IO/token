@@ -24,7 +24,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	/* ========== CONSTANTS ========== */
 
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
-	
+
 	bytes32 public constant REWARD_MANAGER_ROLE = keccak256("REWARD_MANAGER_ROLE");
 	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
@@ -97,6 +97,13 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param whitelist The new whitelist status.
 	 */
 	event UpdateWhitelist(address indexed token, bool whitelist);
+
+	/**
+	 * @notice Emitted when admin rescue tokens.
+	 * @param token the token address.
+	 * @param amount the amount to be rescued.
+	 */
+	event RescueToken(address token, uint256 amount);
 
 	/* ========== STRUCTS ========== */
 
@@ -213,12 +220,11 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (amount == 0) revert ZeroAmount();
 		if (receiver == address(0)) revert ZeroAddress();
 
+		_updateRewardsStates(receiver);
 		IERC20(stakingToken).safeTransferFrom(msg.sender, address(this), amount);
 		totalSupply += amount;
 		balanceOf[receiver] += amount;
 		emit Deposit(msg.sender, amount, receiver);
-
-		_updateRewardsStates(receiver);
 	}
 
 	/**
@@ -231,12 +237,11 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (to == address(0)) revert ZeroAddress();
 		if (amount > balanceOf[msg.sender]) revert InsufficientBalance(balanceOf[msg.sender], amount);
 
+		_updateRewardsStates(msg.sender);
 		IERC20(stakingToken).safeTransfer(to, amount);
 		totalSupply -= amount;
 		balanceOf[msg.sender] -= amount;
 		emit Withdraw(msg.sender, amount, to);
-
-		_updateRewardsStates(msg.sender);
 	}
 
 	/**
@@ -310,6 +315,11 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		}
 
 		emit UpdateWhitelist(token, status);
+	}
+
+	function rescueTokens(address token, uint256 amount) external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
+		IERC20(token).safeTransfer(msg.sender, amount);
+		emit RescueToken(token, amount);
 	}
 
 	/**
