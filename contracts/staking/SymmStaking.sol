@@ -103,7 +103,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param token the token address.
 	 * @param amount the amount to be rescued.
 	 */
-	event RescueToken(address token, uint256 amount);
+	event RescueToken(address token, uint256 amount, address receiver);
 
 	/* ========== STRUCTS ========== */
 
@@ -317,9 +317,15 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		emit UpdateWhitelist(token, status);
 	}
 
-	function rescueTokens(address token, uint256 amount) external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
-		IERC20(token).safeTransfer(msg.sender, amount);
-		emit RescueToken(token, amount);
+	/**
+	 * @notice Withdraw specific amount of token.
+	 * @param token The token address.
+	 * @param amount The amount.
+	 * @param receiver The address of receiver
+	 */
+	function rescueTokens(address token, uint256 amount, address receiver) external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
+		IERC20(token).safeTransfer(receiver, amount);
+		emit RescueToken(token, amount, receiver);
 	}
 
 	/**
