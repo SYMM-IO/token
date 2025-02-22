@@ -96,6 +96,7 @@ contract SymmVesting is Vesting {
 	/// @return lpAmount The amount of LP tokens minted.
 	function _addLiquidity(uint256 symmIn, uint256 minLpAmount) internal returns (uint256[] memory amountsIn, uint256 lpAmount) {
 		(uint256 usdcIn, uint256 expectedLpAmount) = neededUSDCForLiquidity(symmIn);
+		usdcIn = usdcIn / (10**(18-6));
 
 		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 95) / 100; // Default 5% slippage if not specified
 
@@ -116,7 +117,12 @@ contract SymmVesting is Vesting {
 
 		uint256 initialLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
 
-		console.log("BEFOREEE");
+		console.log("p0:: %s",address(POOL));
+		console.log("p1:: %d",amountsIn[0]);
+		console.log("p1:: %d",amountsIn[1]);
+		console.log("p2:: %d",minLpAmountWithSlippage);
+
+	console.log("BEFOREEE");
 		// Call the router to add liquidity.
 		amountsIn = ROUTER.addLiquidityProportional(
 			address(POOL),
