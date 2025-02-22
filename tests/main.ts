@@ -1,5 +1,6 @@
 import { shouldBehaveLikeSymmAllocationClaimer } from "./symmAllocationClaimer.bhavior"
 import { shouldBehaveLikeSymmioToken } from "./symmioToken.behavior"
+import { shouldBehaveLikeSymmStaking} from "./symmStaking.bahavior";
 
 describe("Symmio Token", () => {
 	describe("Static Tests", async function () {
@@ -8,6 +9,9 @@ describe("Symmio Token", () => {
 		})
 		describe("Allocation Claimer", async function () {
 			shouldBehaveLikeSymmAllocationClaimer()
+		})
+		describe.only("Symm Staking", async function () {
+			shouldBehaveLikeSymmStaking()
 		})
 	})
 })
