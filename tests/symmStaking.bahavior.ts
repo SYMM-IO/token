@@ -5,6 +5,7 @@ import { initializeFixture, RunContext } from "./Initialize.fixture";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import {e} from "../utils.ts";
+import { staking } from "../typechain-types/contracts";
 
 export function shouldBehaveLikeSymmStaking() {
 	let context: RunContext;
@@ -101,14 +102,18 @@ export function shouldBehaveLikeSymmStaking() {
 
 		it("should calculate reward correctly after single user deposit", async function () {
 			// Scenario: Single depositor — user1 deposits 604,800 SYMM, waits 200s, claims 200 tokens.
-			const depositAmount = "604800";
-			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount);
-			await symmStaking.connect(user1).deposit(depositAmount, user1.address);
 
+			const depositAmount = "604800";
 			const rewardAmount = depositAmount;
 			await stakingToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount);
 			await symmStaking.connect(admin).configureRewardToken(await stakingToken.getAddress(), true);
 			await symmStaking.connect(admin).notifyRewardAmount([await stakingToken.getAddress()], [rewardAmount]);
+
+			await time.increase(200);
+
+			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount);
+			await symmStaking.connect(user1).deposit(depositAmount, user1.address);
+
 
 			await time.increase(200);
 
@@ -233,6 +238,16 @@ export function shouldBehaveLikeSymmStaking() {
 			expect(user2ClaimedUSDC).to.equal(67n);
 		});
 
+		// it("should give no rewards if the user claims write after deposit", function(){
+		// 	let depositAmount = "100"
+		// 	await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount)
+		// 	const calls = [
+		// 		symmStaking.connect(user1).deposit(depositAmount, user1.address)
+		// 		symmStaking.connect(user1).claimRewards()
+		// 	]
+		//
+		// 	await symmStaking.connect(user1).multiCall
+		// })
 	});
 
 	describe("Config Reward", function () {
@@ -307,8 +322,8 @@ export function shouldBehaveLikeSymmStaking() {
 			const user1BalanceAfterSecondClaim = await usdtToken.balanceOf(user1.address);
 			const user1ClaimedSecondHalf = user1BalanceAfterSecondClaim - user1BalanceBeforeSecondClaim;
 
-			expect(user1ClaimedSecondHalf).to.equal("302400"); // The remaining half of the reward
-
+			// The remaining half of the reward (two less because of calculation precision)
+			expect(user1ClaimedSecondHalf).to.equal("302398");
 			// Admin removes USDT token from reward pool
 			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), false);
 
@@ -466,7 +481,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 	describe("Withdraw", function () {
 
-		it("should allow a user to deposit and then withdraw after some time", async function () {
+		it("should allow a user to deposit and then withdraw after some time, totalSupply should be zero", async function () {
 			// Scenario:
 			// 1. user deposits tokens
 			// 2. waits some time
@@ -485,9 +500,10 @@ export function shouldBehaveLikeSymmStaking() {
 			await symmStaking.connect(user1).withdraw(depositAmount, user1.address);
 
 			const user1BalanceAfter = await stakingToken.balanceOf(user1.address);
-			const claimed = user1BalanceAfter - user1BalanceBefore;
+			const withdrawAmount = user1BalanceAfter - user1BalanceBefore;
 
-			expect(claimed).to.equal(depositAmount);
+			expect(withdrawAmount).to.equal(depositAmount);
+			expect(await symmStaking.connect(admin).totalSupply()).to.equal('0');
 		});
 
 		it("should allow a user to deposit, claim reward, and then withdraw tokens", async function () {

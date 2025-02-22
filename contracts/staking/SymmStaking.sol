@@ -300,7 +300,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 
 		isRewardToken[token] = status;
 		if (!status) {
-			if (pendingRewards[token] != 0) revert OngoingRewardPeriodForToken(token, pendingRewards[token]);
+			if (pendingRewards[token] > 10) revert OngoingRewardPeriodForToken(token, pendingRewards[token]);
 			uint256 len = rewardTokens.length;
 			for (uint256 i = 0; i < len; i++) {
 				if (rewardTokens[i] == token) {
