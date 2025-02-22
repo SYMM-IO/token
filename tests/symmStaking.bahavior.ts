@@ -100,7 +100,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 	describe("Reward Calculation", function () {
 
-		it.only("should calculate reward correctly after single user deposit", async function () {
+		it("should calculate reward correctly after single user deposit", async function () {
 			// Scenario: Single depositor — user1 deposits 604,800 SYMM, waits 200s, claims 200 tokens.
 
 			const depositAmount = "604800";
