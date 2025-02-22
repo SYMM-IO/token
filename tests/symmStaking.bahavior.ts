@@ -481,7 +481,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 	describe("Withdraw", function () {
 
-		it("should allow a user to deposit and then withdraw after some time", async function () {
+		it("should allow a user to deposit and then withdraw after some time, totalSupply should be zero", async function () {
 			// Scenario:
 			// 1. user deposits tokens
 			// 2. waits some time
