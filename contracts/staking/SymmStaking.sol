@@ -17,11 +17,9 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
 	using SafeERC20 for IERC20;
 
-	/* ========== VARIABLES ========== */
-
-	address public stakingToken;
-
-	/* ========== CONSTANTS ========== */
+	//--------------------------------------------------------------------------
+	// Constants
+	//--------------------------------------------------------------------------
 
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
 
@@ -29,7 +27,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
-	/* ========== CUSTOM ERRORS ========== */
+	//--------------------------------------------------------------------------
+	// Errors
+	//--------------------------------------------------------------------------
 
 	/// @notice Thrown when the staked or withdrawn amount is zero.
 	error ZeroAmount();
@@ -58,7 +58,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	/// @param currentStatus The current whitelist status.
 	error TokenWhitelistStatusUnchanged(address token, bool currentStatus);
 
-	/* ========== EVENTS ========== */
+	//--------------------------------------------------------------------------
+	// Events
+	//--------------------------------------------------------------------------
 
 	/**
 	 * @notice Emitted when rewards are added.
@@ -105,7 +107,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 */
 	event RescueToken(address token, uint256 amount, address receiver);
 
-	/* ========== STRUCTS ========== */
+	//--------------------------------------------------------------------------
+	// Structs
+	//--------------------------------------------------------------------------
 
 	struct TokenRewardState {
 		uint256 duration;
@@ -115,7 +119,10 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		uint256 perTokenStored;
 	}
 
-	/* ========== STATE VARIABLES ========== */
+	//--------------------------------------------------------------------------
+	// State Variables
+	//--------------------------------------------------------------------------
+	address public stakingToken;
 
 	uint256 public totalSupply;
 	mapping(address => uint256) public balanceOf;
@@ -135,7 +142,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	// Mapping from reward token to the total pending rewards (i.e. rewards that have been notified but not yet claimed).
 	mapping(address => uint256) public pendingRewards;
 
-	/* ========== INITIALIZER ========== */
+	//--------------------------------------------------------------------------
+	// Initialization
+	//--------------------------------------------------------------------------
 
 	/**
 	 * @notice Initializes the staking contract.
@@ -146,6 +155,8 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		__ReentrancyGuard_init();
 		__Pausable_init();
 
+		if (admin == address(0) || _stakingToken == address(0)) revert ZeroAddress();
+
 		stakingToken = _stakingToken;
 
 		_grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -154,7 +165,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		_grantRole(UNPAUSER_ROLE, admin);
 	}
 
-	/* ========== VIEWS ========== */
+	//--------------------------------------------------------------------------
+	// Views
+	//--------------------------------------------------------------------------
 
 	/**
 	 * @notice Returns the number of reward tokens.
@@ -209,7 +222,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		return rewardState[_rewardsToken].rate * rewardState[_rewardsToken].duration;
 	}
 
-	/* ========== MUTATIVE FUNCTIONS ========== */
+	//--------------------------------------------------------------------------
+	// Mutative Functions
+	//--------------------------------------------------------------------------
 
 	/**
 	 * @notice Deposits SYMM tokens for staking on behalf of a receiver.
@@ -217,10 +232,10 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param receiver The address receiving the staking balance.
 	 */
 	function deposit(uint256 amount, address receiver) external nonReentrant whenNotPaused {
+		_updateRewardsStates(receiver);
+
 		if (amount == 0) revert ZeroAmount();
 		if (receiver == address(0)) revert ZeroAddress();
-
-		_updateRewardsStates(receiver);
 		IERC20(stakingToken).safeTransferFrom(msg.sender, address(this), amount);
 		totalSupply += amount;
 		balanceOf[receiver] += amount;
@@ -233,11 +248,11 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param to The address receiving the tokens.
 	 */
 	function withdraw(uint256 amount, address to) external nonReentrant whenNotPaused {
+		_updateRewardsStates(msg.sender);
+
 		if (amount == 0) revert ZeroAmount();
 		if (to == address(0)) revert ZeroAddress();
 		if (amount > balanceOf[msg.sender]) revert InsufficientBalance(balanceOf[msg.sender], amount);
-
-		_updateRewardsStates(msg.sender);
 		IERC20(stakingToken).safeTransfer(to, amount);
 		totalSupply -= amount;
 		balanceOf[msg.sender] -= amount;
@@ -251,17 +266,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		_updateRewardsStates(msg.sender);
 		_claimRewardsFor(msg.sender);
 	}
-
-	/**
-	 * @notice Allows admin to claim rewards on behalf of a user.
-	 * @param user The user address for which to claim rewards.
-	 */
-	function claimFor(address user) external nonReentrant onlyRole(REWARD_MANAGER_ROLE) whenNotPaused {
-		_updateRewardsStates(user);
-		_claimRewardsFor(user);
-	}
-
-	/* ========== RESTRICTED FUNCTIONS ========== */
 
 	/**
 	 * @notice Notifies the contract about new reward amounts.
@@ -285,6 +289,19 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			_addRewardsForToken(token, amount);
 		}
 		emit RewardNotified(tokens, amounts);
+	}
+
+	//--------------------------------------------------------------------------
+	// Restricted Functions
+	//--------------------------------------------------------------------------
+
+	/**
+	 * @notice Allows admin to claim rewards on behalf of a user.
+	 * @param user The user address for which to claim rewards.
+	 */
+	function claimFor(address user) external nonReentrant onlyRole(REWARD_MANAGER_ROLE) whenNotPaused {
+		_updateRewardsStates(user);
+		_claimRewardsFor(user);
 	}
 
 	/**
@@ -342,7 +359,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		_unpause();
 	}
 
-	/* ========== INTERNAL FUNCTIONS ========== */
+	//--------------------------------------------------------------------------
+	// Internal Functions
+	//--------------------------------------------------------------------------
 
 	function _addRewardsForToken(address token, uint256 amount) internal {
 		TokenRewardState storage state = rewardState[token];

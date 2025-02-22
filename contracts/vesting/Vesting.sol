@@ -7,9 +7,10 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 /// @title Vesting Contract
-contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
+contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
 	using VestingPlanOps for VestingPlan;
 
@@ -20,6 +21,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	error MismatchArrays();
 	error AlreadyClaimedMoreThanThis();
 	error InvalidAmount();
+	error ZeroAddress();
 
 	//--------------------------------------------------------------------------
 	// Events
@@ -71,9 +73,12 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	function __vesting_init(address admin, uint256 _lockedClaimPenalty, address _lockedClaimPenaltyReceiver) public initializer {
 		__AccessControlEnumerable_init();
 		__Pausable_init();
+		__ReentrancyGuard_init();
 
 		lockedClaimPenalty = _lockedClaimPenalty;
 		lockedClaimPenaltyReceiver = _lockedClaimPenaltyReceiver;
+
+		if (admin == address(0) || _lockedClaimPenaltyReceiver == address(0)) revert ZeroAddress();
 
 		_grantRole(DEFAULT_ADMIN_ROLE, admin);
 		_grantRole(SETTER_ROLE, admin);
@@ -168,6 +173,13 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		_claimLockedToken(token, msg.sender, amount);
 	}
 
+	/// @notice Claims locked tokens for the caller by percentage.
+	/// @param token Address of the token.
+	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
+	function claimLockedTokenByPercentage(address token, uint256 percentage) external whenNotPaused {
+		_claimLockedToken(token, msg.sender, (getLockedAmountsForToken(msg.sender, token) * percentage) / 1e18);
+	}
+
 	/// @notice Claims locked tokens for a specified user.
 	/// @dev Only accounts with OPERATOR_ROLE can call this function.
 	/// @param token Address of the token.
@@ -177,6 +189,15 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		_claimLockedToken(token, user, amount);
 	}
 
+	/// @notice Claims locked tokens for a specified user by percentage.
+	/// @dev Only accounts with OPERATOR_ROLE can call this function.
+	/// @param token Address of the token.
+	/// @param user Address of the user.
+	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
+	function claimLockedTokenForByPercentage(address token, address user, uint256 percentage) external onlyRole(OPERATOR_ROLE) whenNotPaused {
+		_claimLockedToken(token, user, (getLockedAmountsForToken(user, token) * percentage) / 1e18);
+	}
+
 	//--------------------------------------------------------------------------
 	// Internal Functions
 	//--------------------------------------------------------------------------
@@ -184,7 +205,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @notice Internal function to claim unlocked tokens.
 	/// @param token Address of the token.
 	/// @param user Address of the user.
-	function _claimUnlockedToken(address token, address user) internal {
+	function _claimUnlockedToken(address token, address user) internal nonReentrant {
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
 		uint256 claimableAmount = vestingPlan.claimable();
 		vestingPlan.claimedAmount += claimableAmount;
@@ -196,7 +217,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	/// @param amount Amount of locked tokens to claim.
-	function _claimLockedToken(address token, address user, uint256 amount) internal {
+	function _claimLockedToken(address token, address user, uint256 amount) internal nonReentrant {
 		// First, claim any unlocked tokens.
 		_claimUnlockedToken(token, user);
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
@@ -207,5 +228,33 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		IERC20(token).transfer(user, amount - penalty);
 		IERC20(token).transfer(lockedClaimPenaltyReceiver, penalty);
 		emit LockedTokenClaimed(token, user, amount, penalty);
+	}
+
+	//--------------------------------------------------------------------------
+	// Views
+	//--------------------------------------------------------------------------
+
+	/// @notice Returns the amount of tokens that are still locked for a user
+	/// @param user Address of the user to check
+	/// @param token Address of the token
+	/// @return The amount of tokens still locked in the user's vesting schedule
+	function getLockedAmountsForToken(address user, address token) public view returns (uint256) {
+		return vestingPlans[token][user].lockedAmount();
+	}
+
+	/// @notice Returns the amount of tokens that are currently claimable by a user
+	/// @param user Address of the user to check
+	/// @param token Address of the token
+	/// @return The amount of tokens that can be claimed right now
+	function getClaimableAmountsForToken(address user, address token) public view returns (uint256) {
+		return vestingPlans[token][user].claimable();
+	}
+
+	/// @notice Returns the amount of tokens that have been unlocked according to the vesting schedule
+	/// @param user Address of the user to check
+	/// @param token Address of the token
+	/// @return The total amount of tokens that have been unlocked (claimed and unclaimed)
+	function getUnlockedAmountForToken(address user, address token) public view returns (uint256) {
+		return vestingPlans[token][user].unlockedAmount();
 	}
 }
