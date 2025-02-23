@@ -8,7 +8,7 @@ export function shouldBehaveLikeSymmVesting() {
 	describe("Add Liquidity", () => {
 		let symmVesting: SymmVesting
 		let symmToken: Symmio
-		let usdc: ERC20
+		let erc20: ERC20
 		let owner: Signer, user1: Signer, vestingPenaltyReceiver: Signer, usdcWhale: Signer
 
 		const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6"
@@ -33,7 +33,7 @@ export function shouldBehaveLikeSymmVesting() {
 			const TokenFactory = await ethers.getContractFactory("Symmio")
 			const ERC20Factory = await ethers.getContractFactory("MockERC20")
 			symmToken = TokenFactory.attach("0x800822d361335b4d5F352Dac293cA4128b5B605f") as Symmio
-			usdc = ERC20Factory.attach("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") as ERC20
+			erc20 = ERC20Factory.attach("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") as ERC20
 
 			const VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
 			const vestingPlanOps = await VestingPlanOps.deploy()
@@ -51,8 +51,8 @@ export function shouldBehaveLikeSymmVesting() {
 			await symmToken.connect(owner).grantRole(MINTER_ROLE, await owner.getAddress())
 			await symmToken.connect(owner).mint(await symmVesting.getAddress(), e("1000"))
 
-			await usdc.connect(usdcWhale).transfer(await user1.getAddress(), "1000000000000")
-			await usdc.connect(user1).approve(await symmVesting.getAddress(), "1000000000000")
+			await erc20.connect(usdcWhale).transfer(await user1.getAddress(), "1000000000")
+			await erc20.connect(user1).approve(await symmVesting.getAddress(), "1000000000")
 
 			// Setup vesting plans
 			const users = [await user1.getAddress()]
@@ -63,42 +63,8 @@ export function shouldBehaveLikeSymmVesting() {
 			await symmVesting.connect(owner).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
 		})
 
-		it("should allow a user to add liquidity successfully using permit", async () => {
-			// --- Begin Permit ---
-			const permitAmount = "1000000000000"
-			const deadline = Math.floor(Date.now() / 1000) + 3600 // permit valid for 1 hour
-			const nonce = 1
-			const chainId = (await ethers.provider.getNetwork()).chainId
-
-			const domain = {
-				name: await usdc.name(),
-				version: "1",
-				chainId,
-				verifyingContract: await usdc.getAddress(),
-			}
-
-			const permit = {
-				owner: await user1.getAddress(),
-				spender: await symmVesting.getAddress(),
-				value: permitAmount,
-				nonce: nonce,
-				deadline,
-			}
-
-			const types = {
-				Permit: [
-					{ name: "owner", type: "address" },
-					{ name: "spender", type: "address" },
-					{ name: "value", type: "uint256" },
-					{ name: "nonce", type: "uint256" },
-					{ name: "deadline", type: "uint256" },
-				],
-			}
-
-			const signature = await user1.signTypedData(domain, types, permit)
-
-			// Now that the permit is in place, proceed with adding liquidity.
-			await symmVesting.connect(user1).addLiquidity(SYMM_AMOUNT, MIN_LP_AMOUNT, signature)
+		it("should allow a user to add liquidity successfully", async () => {
+			await symmVesting.connect(user1).addLiquidity(SYMM_AMOUNT, MIN_LP_AMOUNT)
 			const lpBalance = await symmVesting.vestingPlans(await symmVesting.SYMM_LP(), await user1.getAddress())
 			// expect(lpBalance.lockedAmount).to.be.greaterThan(0)
 		})
