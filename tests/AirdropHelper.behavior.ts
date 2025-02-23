@@ -4,7 +4,7 @@ import { Signer } from "ethers"
 import { ethers, network } from "hardhat"
 import { AirdropHelper, Symmio } from "../typechain-types"
 
-describe("AirdropHelper", () => {
+export function shouldBehaveLikeAirdropHelper(): void {
 	// Contract instances
 	let airdropHelper: AirdropHelper
 	let symmToken: Symmio
@@ -248,4 +248,4 @@ describe("AirdropHelper", () => {
 			expect(await airdropHelper.getRemainingAirdrops()).to.equal(1)
 		})
 	})
-})
+}
