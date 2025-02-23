@@ -6,7 +6,6 @@ import { IPool } from "./interfaces/IPool.sol";
 import { IRouter } from "./interfaces/IRouter.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "hardhat/console.sol";
 
 /// @title SymmVesting Contract
 /// @notice Extends Vesting to add liquidity functionality for SYMM and SYMM LP tokens.
@@ -103,8 +102,6 @@ contract SymmVesting is Vesting {
 		// Retrieve pool tokens. Assumes poolTokens[0] is SYMM and poolTokens[1] is USDC.
 		IERC20[] memory poolTokens = POOL.getTokens();
 		(IERC20 symm, IERC20 usdc) = (poolTokens[0], poolTokens[1]);
-		console.log("usdc address:: %s",address(usdc));
-		console.log("usdc In:: %s",usdcIn);
 
 		// Pull USDC from the user and approve the VAULT.
 		usdc.transferFrom(msg.sender, address(this), usdcIn);
@@ -117,12 +114,6 @@ contract SymmVesting is Vesting {
 
 		uint256 initialLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
 
-		console.log("p0:: %s",address(POOL));
-		console.log("p1:: %d",amountsIn[0]);
-		console.log("p1:: %d",amountsIn[1]);
-		console.log("p2:: %d",minLpAmountWithSlippage);
-
-	console.log("BEFOREEE");
 		// Call the router to add liquidity.
 		amountsIn = ROUTER.addLiquidityProportional(
 			address(POOL),
@@ -131,9 +122,6 @@ contract SymmVesting is Vesting {
 			false, // wethIsEth: bool
 			"" // userData: bytes
 		);
-
-		console.log("AFFFFTERRR");
-
 
 		// Calculate actual LP tokens received by comparing balances
 		uint256 newLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
