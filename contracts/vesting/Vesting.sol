@@ -8,7 +8,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-
+import "hardhat/console.sol";
 /// @title Vesting Contract
 contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
@@ -243,6 +243,8 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		uint256 claimableAmount = vestingPlan.claimable();
 
 		// Adjust the vesting plan
+		console.log("%d", totalVested[token]);
+		console.log("%d", claimableAmount);
 		totalVested[token] -= claimableAmount;
 		vestingPlan.claimedAmount += claimableAmount;
 
