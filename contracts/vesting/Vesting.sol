@@ -8,6 +8,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+
 /// @title Vesting Contract
 contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
@@ -114,7 +115,11 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param users Array of user addresses.
 	/// @param amounts Array of new token amounts.
-	function resetVestingPlans(address token, address[] calldata users, uint256[] calldata amounts) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
+	function resetVestingPlans(
+		address token,
+		address[] calldata users,
+		uint256[] calldata amounts
+	) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
 		if (users.length != amounts.length) revert MismatchArrays();
 		uint256 len = users.length;
 		for (uint256 i = 0; i < len; i++) {
@@ -150,7 +155,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		for (uint256 i = 0; i < len; i++) {
 			address user = users[i];
 			uint256 amount = amounts[i];
-        	totalVested[token] += amount;
+			totalVested[token] += amount;
 			VestingPlan storage vestingPlan = vestingPlans[token][user];
 			vestingPlan.setup(amount, startTime, endTime);
 			emit VestingPlanSetup(token, user, amount, startTime, endTime);
@@ -199,7 +204,11 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	/// @param percentage Percentage of locked tokens to claim (between 0 and 1 -- 1 for 100%).
-	function claimLockedTokenForByPercentage(address token, address user, uint256 percentage) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
+	function claimLockedTokenForByPercentage(
+		address token,
+		address user,
+		uint256 percentage
+	) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant {
 		_claimLockedToken(token, user, (getLockedAmountsForToken(user, token) * percentage) / 1e18);
 	}
 
@@ -207,15 +216,41 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	// Internal Functions
 	//--------------------------------------------------------------------------
 
+	/// @notice Checks if the contract holds enough of the token, and if not, calls a minting hook.
+	/// @param token The address of the token.
+	/// @param amount The required amount.
+	function _ensureSufficientBalance(address token, uint256 amount) internal virtual {
+		uint256 currentBalance = IERC20(token).balanceOf(address(this));
+		if (currentBalance < amount) {
+			uint256 deficit = amount - currentBalance;
+			// This hook can be overridden to mint the token.
+			_mintTokenIfPossible(token, deficit);
+		}
+	}
+
+	/// @notice Virtual hook to mint tokens if the token supports minting. In the parent, this is a no-op.
+	/// @param token The address of the token.
+	/// @param amount The amount to mint.
+	function _mintTokenIfPossible(address token, uint256 amount) internal virtual {
+		// Default implementation does nothing.
+	}
+
 	/// @notice Internal function to claim unlocked tokens.
 	/// @param token Address of the token.
 	/// @param user Address of the user.
 	function _claimUnlockedToken(address token, address user) internal {
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
 		uint256 claimableAmount = vestingPlan.claimable();
+
+		// Adjust the vesting plan
 		totalVested[token] -= claimableAmount;
 		vestingPlan.claimedAmount += claimableAmount;
+
+		// Ensure sufficient balance (minting if necessary)
+		_ensureSufficientBalance(token, claimableAmount);
+
 		IERC20(token).transfer(user, claimableAmount);
+
 		emit UnlockedTokenClaimed(token, user, claimableAmount);
 	}
 
@@ -228,12 +263,18 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		_claimUnlockedToken(token, user);
 		VestingPlan storage vestingPlan = vestingPlans[token][user];
 		if (vestingPlan.lockedAmount() < amount) revert InvalidAmount();
-		// Reset the vesting plan to reduce the locked amount.
+
+		// Adjust the vesting plan
 		vestingPlan.resetAmount(vestingPlan.lockedAmount() - amount);
 		totalVested[token] -= amount;
 		uint256 penalty = (amount * lockedClaimPenalty) / 1e18;
+
+		// Ensure sufficient balance (minting if necessary)
+		_ensureSufficientBalance(token, amount);
+
 		IERC20(token).transfer(user, amount - penalty);
 		IERC20(token).transfer(lockedClaimPenaltyReceiver, penalty);
+
 		emit LockedTokenClaimed(token, user, amount, penalty);
 	}
 

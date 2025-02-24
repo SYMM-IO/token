@@ -2,11 +2,13 @@
 pragma solidity ^0.8.27;
 
 import "./Vesting.sol";
+import "./interfaces/IPermit2.sol";
+import "./interfaces/IMintableERC20.sol";
 import { IPool } from "./interfaces/IPool.sol";
 import { IRouter } from "./interfaces/IRouter.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./interfaces/IPermit2.sol";
+
 /// @title SymmVesting Contract
 /// @notice Extends Vesting to add liquidity functionality for SYMM and SYMM LP tokens.
 /// @dev Inherits pausable functionality and vesting plan management from Vesting.
@@ -29,6 +31,7 @@ contract SymmVesting is Vesting {
 	//--------------------------------------------------------------------------
 
 	error SlippageExceeded();
+	error ZeroDivision();
 
 	//--------------------------------------------------------------------------
 	// Constants
@@ -54,13 +57,14 @@ contract SymmVesting is Vesting {
 	}
 
 	//--------------------------------------------------------------------------
-	// LP for vesting function
+	// Liquidity for Vesting Functions
 	//--------------------------------------------------------------------------
 
 	/// @notice Adds liquidity by converting a portion of SYMM vesting into SYMM LP tokens.
 	/// @dev Claims any unlocked tokens from SYMM and SYMM LP vesting plans.
 	///      Reverts if the SYMM vesting plan's locked amount is insufficient.
 	/// @param amount The amount of SYMM to use for adding liquidity.
+	/// @param minLpAmount The minimum acceptable LP token amount to receive (for slippage protection).
 	/// @return amountsIn Array of token amounts used (SYMM and USDC).
 	/// @return lpAmount The amount of LP tokens minted.
 	function addLiquidity(
@@ -73,9 +77,7 @@ contract SymmVesting is Vesting {
 		VestingPlan storage symmVestingPlan = vestingPlans[SYMM][msg.sender];
 		uint256 symmLockedAmount = symmVestingPlan.lockedAmount();
 		if (symmLockedAmount <= amount) revert InvalidAmount();
-		console.log("token: %s", SYMM);
-		console.log("user: %s", msg.sender);
-		console.log("amount: %d", symmVestingPlan.amount);
+
 		// Update SYMM vesting plan by reducing the locked amount.
 		symmVestingPlan.resetAmount(symmLockedAmount - amount);
 
@@ -86,29 +88,26 @@ contract SymmVesting is Vesting {
 		_claimUnlockedToken(SYMM_LP, msg.sender);
 
 		VestingPlan storage lpVestingPlan = vestingPlans[SYMM_LP][msg.sender];
-		if(lpVestingPlan.amount==0){
-			lpVestingPlan.startTime = block.timestamp;
-			lpVestingPlan.endTime = symmVestingPlan.endTime;
-			lpVestingPlan.claimedAmount = 0;
-			lpVestingPlan.amount = lpAmount;//TODO: setup
-		}
-		else{
-			// Increase the locked amount by the received LP tokens.
+		// Increase the locked amount by the received LP tokens.
+		if (lpVestingPlan.amount == 0) {
+			lpVestingPlan.setup(lpAmount, block.timestamp, symmVestingPlan.endTime);
+		} else {
 			lpVestingPlan.resetAmount(lpVestingPlan.lockedAmount() + lpAmount);
 		}
 
 		emit LiquidityAdded(msg.sender, amount, amountsIn[1], lpAmount);
 	}
 
-	/// @notice Internal function that adds liquidity using the provided SYMM amount.
-	/// @dev Transfers USDC from the caller and approves token spending for the VAULT.
+	/// @notice Internal function to add liquidity using a specified amount of SYMM.
+	/// @dev Transfers USDC from the caller, approves token spending for the VAULT, and interacts with the liquidity router.
 	/// @param symmIn The amount of SYMM to contribute.
-	/// @return amountsIn Array of token amounts used (SYMM and USDC).
-	/// @return lpAmount The amount of LP tokens minted.
+	/// @param minLpAmount The minimum acceptable LP token amount to receive (for slippage protection).
+	/// @return amountsIn Array containing the amounts of SYMM and USDC used.
+	/// @return lpAmount The number of LP tokens minted.
 	function _addLiquidity(uint256 symmIn, uint256 minLpAmount) internal returns (uint256[] memory amountsIn, uint256 lpAmount) {
-		(uint256 usdcIn, uint256 expectedLpAmount) = neededUSDCForLiquidity(symmIn);
+		(uint256 usdcIn, uint256 expectedLpAmount) = getLiquidityQuote(symmIn);
 
-//		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 95) / 100; // Default 5% slippage if not specified
+		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 95) / 100; // Default 5% slippage if not specified
 
 		// Retrieve pool tokens. Assumes poolTokens[0] is SYMM and poolTokens[1] is USDC.
 		IERC20[] memory poolTokens = POOL.getTokens();
@@ -118,8 +117,8 @@ contract SymmVesting is Vesting {
 		usdc.transferFrom(msg.sender, address(this), usdcIn);
 		usdc.approve(address(PERMIT2), usdcIn);
 		symm.approve(address(PERMIT2), symmIn);
-		PERMIT2.approve(SYMM, address(ROUTER), uint160(symmIn), uint48(block.timestamp+3600));//TODO: expiration
-		PERMIT2.approve(USDC, address(ROUTER), uint160(usdcIn), uint48(block.timestamp+3600));//TODO: expiration
+		PERMIT2.approve(SYMM, address(ROUTER), uint160(symmIn), uint48(block.timestamp + 3600)); //TODO: adjust expiration as needed
+		PERMIT2.approve(USDC, address(ROUTER), uint160(usdcIn), uint48(block.timestamp + 3600)); //TODO: adjust expiration as needed
 
 		amountsIn = new uint256[](2);
 		amountsIn[0] = symmIn;
@@ -136,20 +135,23 @@ contract SymmVesting is Vesting {
 			"" // userData: bytes
 		);
 
-		// Calculate actual LP tokens received by comparing balances
+		// Calculate actual LP tokens received by comparing balances.
 		uint256 newLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
 		lpAmount = newLpBalance - initialLpBalance;
 
-//		if (lpAmount < minLpAmountWithSlippage) revert SlippageExceeded();
+		if (lpAmount < minLpAmountWithSlippage) revert SlippageExceeded();
 	}
 
-
-	//TODO: RMOVE?
+	/// @notice Calculates the ceiling of (a * b) divided by c.
+	/// @dev Computes ceil(a * b / c) using the formula (a * b - 1) / c + 1 when the product is nonzero.
+	///      Returns 0 if a * b equals 0.
+	/// @param a The multiplicand.
+	/// @param b The multiplier.
+	/// @param c The divisor.
+	/// @return result The smallest integer greater than or equal to (a * b) / c.
 	function mulDivUp(uint256 a, uint256 b, uint256 c) internal pure returns (uint256 result) {
-		// This check is required because Yul's `div` doesn't revert on c==0.
-//		if (c == 0) {
-//			revert ZeroDivision();
-//		}
+		// This check is required because Yul's div doesn't revert on c==0.
+		if (c == 0) revert ZeroDivision();
 
 		// Multiple overflow protection is done by Solidity 0.8.x.
 		uint256 product = a * b;
@@ -167,21 +169,23 @@ contract SymmVesting is Vesting {
 		}
 	}
 
-	/// @notice Calculates the USDC required and LP tokens expected for the provided SYMM amount.
+	/// @notice Calculates the USDC required and LP tokens expected for a given SYMM amount.
+	/// @dev Uses current pool balances and total supply to compute the liquidity parameters.
 	/// @param symmAmount The amount of SYMM.
 	/// @return usdcAmount The USDC required.
 	/// @return lpAmount The LP tokens that will be minted.
-	//TODO: not a descriptive name!
-	function neededUSDCForLiquidity(uint256 symmAmount) public view returns (uint256 usdcAmount, uint256 lpAmount) {
+	function getLiquidityQuote(uint256 symmAmount) public view returns (uint256 usdcAmount, uint256 lpAmount) {
 		uint256[] memory balances = POOL.getCurrentLiveBalances();
 		uint256 totalSupply = POOL.totalSupply();
 		uint256 symmBalance = balances[0];
 		uint256 usdcBalance = balances[1];
 
-		// Calculate proportionate ratios based on SYMM balance.
-//		uint256 symmRatio = (symmAmount) / symmBalance;
 		usdcAmount = (symmAmount * usdcBalance) / symmBalance;
 		usdcAmount = mulDivUp(usdcAmount, 1e18, 1e30);
 		lpAmount = (symmAmount * totalSupply) / symmBalance;
+	}
+
+	function _mintTokenIfPossible(address token, uint256 amount) internal override {
+		if (token == SYMM) IMintableERC20(token).mint(address(this), amount);
 	}
 }
