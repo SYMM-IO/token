@@ -47,7 +47,7 @@ export const config: HardhatUserConfig = {
 		hardhat: {
 			forking: {
 				url: "https://base.llamarpc.com",
-				blockNumber: 26681141,
+				blockNumber: 26800831,
 			},
 		},
 		ethereum: {

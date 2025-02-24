@@ -3,6 +3,7 @@ import { Signer } from "ethers"
 import { ethers, network, upgrades } from "hardhat"
 import { ERC20, Symmio, SymmVesting } from "../typechain-types"
 import { e } from "../utils"
+import { string } from "hardhat/internal/core/params/argumentTypes";
 
 export function shouldBehaveLikeSymmVesting() {
 	describe("Add Liquidity", () => {
@@ -13,7 +14,7 @@ export function shouldBehaveLikeSymmVesting() {
 
 		const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6"
 		const INITIAL_BALANCE = e(100)
-		const SYMM_AMOUNT = "99999999999999999250"
+		const SYMM_AMOUNT = String(1e18)
 		const MIN_LP_AMOUNT = "0"
 
 		async function impersonateAccount(address: string) {
@@ -25,7 +26,7 @@ export function shouldBehaveLikeSymmVesting() {
 			;[user1, vestingPenaltyReceiver] = await ethers.getSigners()
 
 			owner = await impersonateAccount("0x8CF65060CdA270a3886452A1A1cb656BECEE5bA4")
-			usdcWhale = await impersonateAccount("0x6D5f64FB9c634b3cE3Ffd67035D9B70654fE1442")
+			usdcWhale = await impersonateAccount("0x607094ed3a8361bB5e94dD21bcBef2997b687478")
 
 			await setBalance(await owner.getAddress(), INITIAL_BALANCE)
 			await setBalance(await usdcWhale.getAddress(), INITIAL_BALANCE)
@@ -78,3 +79,7 @@ export function shouldBehaveLikeSymmVesting() {
 		// })
 	})
 }
+// 1000000000000000000 (200000000000000000000000)
+// 0.999999999999999999
+// 11143(20)
+// 406794621267856455
