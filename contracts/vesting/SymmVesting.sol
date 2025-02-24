@@ -6,7 +6,6 @@ import { IPool } from "./interfaces/IPool.sol";
 import { IRouter } from "./interfaces/IRouter.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "hardhat/console.sol";
 import "./interfaces/IPermit2.sol";
 /// @title SymmVesting Contract
 /// @notice Extends Vesting to add liquidity functionality for SYMM and SYMM LP tokens.
@@ -74,7 +73,9 @@ contract SymmVesting is Vesting {
 		VestingPlan storage symmVestingPlan = vestingPlans[SYMM][msg.sender];
 		uint256 symmLockedAmount = symmVestingPlan.lockedAmount();
 		if (symmLockedAmount <= amount) revert InvalidAmount();
-
+		console.log("token: %s", SYMM);
+		console.log("user: %s", msg.sender);
+		console.log("amount: %d", symmVestingPlan.amount);
 		// Update SYMM vesting plan by reducing the locked amount.
 		symmVestingPlan.resetAmount(symmLockedAmount - amount);
 
@@ -85,8 +86,16 @@ contract SymmVesting is Vesting {
 		_claimUnlockedToken(SYMM_LP, msg.sender);
 
 		VestingPlan storage lpVestingPlan = vestingPlans[SYMM_LP][msg.sender];
-		// Increase the locked amount by the received LP tokens.
-		lpVestingPlan.resetAmount(lpVestingPlan.lockedAmount() + lpAmount);
+		if(lpVestingPlan.amount==0){
+			lpVestingPlan.startTime = block.timestamp;
+			lpVestingPlan.endTime = symmVestingPlan.endTime;
+			lpVestingPlan.claimedAmount = 0;
+			lpVestingPlan.amount = lpAmount;//TODO: setup
+		}
+		else{
+			// Increase the locked amount by the received LP tokens.
+			lpVestingPlan.resetAmount(lpVestingPlan.lockedAmount() + lpAmount);
+		}
 
 		emit LiquidityAdded(msg.sender, amount, amountsIn[1], lpAmount);
 	}
@@ -98,7 +107,6 @@ contract SymmVesting is Vesting {
 	/// @return lpAmount The amount of LP tokens minted.
 	function _addLiquidity(uint256 symmIn, uint256 minLpAmount) internal returns (uint256[] memory amountsIn, uint256 lpAmount) {
 		(uint256 usdcIn, uint256 expectedLpAmount) = neededUSDCForLiquidity(symmIn);
-//		usdcIn = usdcIn / (10 ** (18 - 6));
 
 //		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 95) / 100; // Default 5% slippage if not specified
 
@@ -113,16 +121,11 @@ contract SymmVesting is Vesting {
 		PERMIT2.approve(SYMM, address(ROUTER), uint160(symmIn), uint48(block.timestamp+3600));//TODO: expiration
 		PERMIT2.approve(USDC, address(ROUTER), uint160(usdcIn), uint48(block.timestamp+3600));//TODO: expiration
 
-//		POOL.approve(VAULT, expectedLpAmount);
-
 		amountsIn = new uint256[](2);
 		amountsIn[0] = symmIn;
 		amountsIn[1] = usdcIn;
 
 		uint256 initialLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
-		console.log("SYMM: %d", amountsIn[0]);
-		console.log("USDC: %d", amountsIn[1]);
-		console.log("BPT: %d", expectedLpAmount);
 
 		// Call the router to add liquidity.
 		amountsIn = ROUTER.addLiquidityProportional(

@@ -14,7 +14,7 @@ export function shouldBehaveLikeSymmVesting() {
 
 		const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6"
 		const INITIAL_BALANCE = e(100)
-		const SYMM_AMOUNT = String(1e18)
+		const SYMM_AMOUNT = String(1e10)
 		const MIN_LP_AMOUNT = "0"
 
 		async function impersonateAccount(address: string) {
@@ -67,6 +67,7 @@ export function shouldBehaveLikeSymmVesting() {
 		it("should allow a user to add liquidity successfully", async () => {
 			await symmVesting.connect(user1).addLiquidity(SYMM_AMOUNT, MIN_LP_AMOUNT)
 			const lpBalance = await symmVesting.vestingPlans(await symmVesting.SYMM_LP(), await user1.getAddress())
+			console.log(await lpBalance);
 			// expect(lpBalance.lockedAmount).to.be.greaterThan(0)
 		})
 
