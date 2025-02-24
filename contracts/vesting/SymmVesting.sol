@@ -95,7 +95,7 @@ contract SymmVesting is Vesting {
 			lpVestingPlan.resetAmount(lpVestingPlan.lockedAmount() + lpAmount);
 		}
 
-		emit LiquidityAdded(msg.sender, amount, amountsIn[1], lpAmount);
+		emit LiquidityAdded(msg.sender, amountsIn[0], amountsIn[1], lpAmount);
 	}
 
 	/// @notice Internal function to add liquidity using a specified amount of SYMM.
@@ -117,8 +117,8 @@ contract SymmVesting is Vesting {
 		usdc.transferFrom(msg.sender, address(this), usdcIn);
 		usdc.approve(address(PERMIT2), usdcIn);
 		symm.approve(address(PERMIT2), symmIn);
-		PERMIT2.approve(SYMM, address(ROUTER), uint160(symmIn), uint48(block.timestamp + 3600)); //TODO: adjust expiration as needed
-		PERMIT2.approve(USDC, address(ROUTER), uint160(usdcIn), uint48(block.timestamp + 3600)); //TODO: adjust expiration as needed
+		PERMIT2.approve(SYMM, address(ROUTER), uint160(symmIn), uint48(block.timestamp));
+		PERMIT2.approve(USDC, address(ROUTER), uint160(usdcIn), uint48(block.timestamp));
 
 		amountsIn = new uint256[](2);
 		amountsIn[0] = symmIn;
@@ -149,7 +149,7 @@ contract SymmVesting is Vesting {
 	/// @param b The multiplier.
 	/// @param c The divisor.
 	/// @return result The smallest integer greater than or equal to (a * b) / c.
-	function mulDivUp(uint256 a, uint256 b, uint256 c) internal pure returns (uint256 result) {
+	function _mulDivUp(uint256 a, uint256 b, uint256 c) internal pure returns (uint256 result) {
 		// This check is required because Yul's div doesn't revert on c==0.
 		if (c == 0) revert ZeroDivision();
 
@@ -181,7 +181,7 @@ contract SymmVesting is Vesting {
 		uint256 usdcBalance = balances[1];
 
 		usdcAmount = (symmAmount * usdcBalance) / symmBalance;
-		usdcAmount = mulDivUp(usdcAmount, 1e18, 1e30);
+		usdcAmount = _mulDivUp(usdcAmount, 1e18, 1e30);
 		lpAmount = (symmAmount * totalSupply) / symmBalance;
 	}
 
