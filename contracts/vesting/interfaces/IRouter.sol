@@ -57,4 +57,36 @@ interface IRouter {
 		bytes calldata permit2Signature,
 		bytes[] calldata multicallData
 	) external payable returns (bytes[] memory results);
+
+	/**
+ 	* @notice Queries an `addLiquidityUnbalanced` operation without actually executing it.
+     * @param pool Address of the liquidity pool
+     * @param exactAmountsIn Exact amounts of tokens to be added, sorted in token registration order
+     * @param sender The sender passed to the operation. It can influence results (e.g., with user-dependent hooks)
+     * @param userData Additional (optional) data sent with the query request
+     * @return bptAmountOut Expected amount of pool tokens to receive
+     */
+	function queryAddLiquidityUnbalanced(
+		address pool,
+		uint256[] memory exactAmountsIn,
+		address sender,
+		bytes memory userData
+	) external returns (uint256 bptAmountOut);
+
+	/**
+ 	* @notice Adds liquidity to a pool with arbitrary token amounts.
+     * @param pool Address of the liquidity pool
+     * @param exactAmountsIn Exact amounts of tokens to be added, sorted in token registration order
+     * @param minBptAmountOut Minimum amount of pool tokens to be received
+     * @param wethIsEth If true, incoming ETH will be wrapped to WETH and outgoing WETH will be unwrapped to ETH
+     * @param userData Additional (optional) data sent with the request to add liquidity
+     * @return bptAmountOut Actual amount of pool tokens received
+     */
+	function addLiquidityUnbalanced(
+		address pool,
+		uint256[] memory exactAmountsIn,
+		uint256 minBptAmountOut,
+		bool wethIsEth,
+		bytes memory userData
+	) external payable returns (uint256 bptAmountOut);
 }

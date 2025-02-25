@@ -134,13 +134,25 @@ contract SymmVesting is Vesting {
 
 		uint256 initialLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
 
+
+
 		// Call the router to add liquidity.
-		amountsIn = ROUTER.addLiquidityProportional(
+//		amountsIn = ROUTER.addLiquidityProportional(
+//			address(POOL),
+//			amountsIn,
+//			expectedLpAmount,
+//			false, // wethIsEth: bool
+//			"" // userData: bytes
+//		);
+
+		uint256 bptOut = _queryUnbalancedLiquidity(amountsIn);
+
+		uint256 exactBptOut = ROUTER.addLiquidityUnbalanced(
 			address(POOL),
 			amountsIn,
-			expectedLpAmount,
-			false, // wethIsEth: bool
-			"" // userData: bytes
+			bptOut,
+			false,
+			""
 		);
 
 		// Return unused usdc
@@ -151,6 +163,27 @@ contract SymmVesting is Vesting {
 		lpAmount = newLpBalance - initialLpBalance;
 
 		if (lpAmount < minLpAmountWithSlippage) revert SlippageExceeded();
+	}
+
+	// This function performs a static call to queryAddLiquidityUnbalanced
+	function _queryUnbalancedLiquidity(uint256[] memory amountsIn) public view returns (uint256) {
+		// Prepare the call data using the function signature.
+		// Using new bytes(0) to represent an empty bytes array.
+		bytes memory data = abi.encodeWithSignature(
+			"queryAddLiquidityUnbalanced(address,uint256[],address,bytes)",
+			POOL,
+			amountsIn,
+			msg.sender,
+			new bytes(0)
+		);
+
+		// Execute the static call on the ROUTER contract.
+		(bool success, bytes memory result) = address(ROUTER).staticcall(data);
+		require(success, "Static call failed");
+
+		// Decode the returned bytes into a uint256.
+		uint256 bptOut = abi.decode(result, (uint256));
+		return bptOut;
 	}
 
 	/// @notice Calculates the ceiling of (a * b) divided by c.
