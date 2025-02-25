@@ -8,7 +8,6 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "hardhat/console.sol";
 
 /// @title Vesting Contract
 contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
@@ -230,7 +229,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 			_claimUnlockedToken(token, user);
 			VestingPlan storage vestingPlan = vestingPlans[token][user];
 			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
-			uint256 oldTotal = vestingPlan.unlockedAmount() + vestingPlan.lockedAmount();
+			uint256 oldTotal = vestingPlan.lockedAmount();
 			vestingPlan.resetAmount(amount);
 			totalVested[token] = totalVested[token] - oldTotal + amount;
 			emit VestingPlanReset(token, user, amount);
@@ -264,8 +263,6 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		uint256 claimableAmount = vestingPlan.claimable();
 
 		// Adjust the vesting plan
-		console.log("%d", totalVested[token]);
-		console.log("%d", claimableAmount);
 		totalVested[token] -= claimableAmount;
 		vestingPlan.claimedAmount += claimableAmount;
 
