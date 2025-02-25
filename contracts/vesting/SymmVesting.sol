@@ -78,11 +78,13 @@ contract SymmVesting is Vesting {
 		uint256 symmLockedAmount = symmVestingPlan.lockedAmount();
 		if (symmLockedAmount <= amount) revert InvalidAmount();
 
-		// Update SYMM vesting plan by reducing the locked amount.
-		symmVestingPlan.resetAmount(symmLockedAmount - amount);
+		_ensureSufficientBalance(SYMM, amount);
 
 		// Add liquidity to the pool.
 		(amountsIn, lpAmount) = _addLiquidity(amount, minLpAmount);
+
+		// Update SYMM vesting plan by reducing the locked amount.
+		symmVestingPlan.resetAmount(symmLockedAmount - amountsIn[0]);
 
 		// Claim any unlocked SYMM LP tokens.
 		_claimUnlockedToken(SYMM_LP, msg.sender);
@@ -140,6 +142,9 @@ contract SymmVesting is Vesting {
 			false, // wethIsEth: bool
 			"" // userData: bytes
 		);
+
+		// Return unused usdc
+		if (usdcIn - amountsIn[1] > 0) usdc.transfer(msg.sender, usdcIn);
 
 		// Calculate actual LP tokens received by comparing balances.
 		uint256 newLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
