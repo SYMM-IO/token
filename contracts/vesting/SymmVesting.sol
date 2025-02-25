@@ -88,11 +88,17 @@ contract SymmVesting is Vesting {
 		_claimUnlockedToken(SYMM_LP, msg.sender);
 
 		VestingPlan storage lpVestingPlan = vestingPlans[SYMM_LP][msg.sender];
+
+		address[] memory users = new address[](1);
+		users[0] = msg.sender;
+		uint256[] memory amounts = new uint256[](1);
+		amounts[0] = lpVestingPlan.lockedAmount() + lpAmount;
+
 		// Increase the locked amount by the received LP tokens.
-		if (lpVestingPlan.amount == 0) {
-			lpVestingPlan.setup(lpAmount, block.timestamp, symmVestingPlan.endTime);
+		if (lpVestingPlan.isSetup()) {
+			_resetVestingPlans(SYMM_LP, users, amounts);
 		} else {
-			lpVestingPlan.resetAmount(lpVestingPlan.lockedAmount() + lpAmount);
+			_setupVestingPlans(SYMM_LP, block.timestamp, symmVestingPlan.endTime, users, amounts);
 		}
 
 		emit LiquidityAdded(msg.sender, amountsIn[0], amountsIn[1], lpAmount);

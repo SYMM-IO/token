@@ -9,6 +9,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "hardhat/console.sol";
+
 /// @title Vesting Contract
 contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
@@ -117,23 +118,10 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param amounts Array of new token amounts.
 	function resetVestingPlans(
 		address token,
-		address[] calldata users,
-		uint256[] calldata amounts
+		address[] memory users,
+		uint256[] memory amounts
 	) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
-		if (users.length != amounts.length) revert MismatchArrays();
-		uint256 len = users.length;
-		for (uint256 i = 0; i < len; i++) {
-			address user = users[i];
-			uint256 amount = amounts[i];
-			// Claim any unlocked tokens before resetting.
-			_claimUnlockedToken(token, user);
-			VestingPlan storage vestingPlan = vestingPlans[token][user];
-			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
-			uint256 oldTotal = vestingPlan.unlockedAmount() + vestingPlan.lockedAmount();
-			vestingPlan.resetAmount(amount);
-			totalVested[token] = totalVested[token] - oldTotal + amount;
-			emit VestingPlanReset(token, user, amount);
-		}
+		_resetVestingPlans(token, users, amounts);
 	}
 
 	/// @notice Sets up vesting plans for multiple users.
@@ -147,19 +135,10 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 		address token,
 		uint256 startTime,
 		uint256 endTime,
-		address[] calldata users,
-		uint256[] calldata amounts
+		address[] memory users,
+		uint256[] memory amounts
 	) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
-		if (users.length != amounts.length) revert MismatchArrays();
-		uint256 len = users.length;
-		for (uint256 i = 0; i < len; i++) {
-			address user = users[i];
-			uint256 amount = amounts[i];
-			totalVested[token] += amount;
-			VestingPlan storage vestingPlan = vestingPlans[token][user];
-			vestingPlan.setup(amount, startTime, endTime);
-			emit VestingPlanSetup(token, user, amount, startTime, endTime);
-		}
+		_setupVestingPlans(token, startTime, endTime, users, amounts);
 	}
 
 	/// @notice Claims unlocked tokens for the caller.
@@ -215,6 +194,48 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	//--------------------------------------------------------------------------
 	// Internal Functions
 	//--------------------------------------------------------------------------
+
+	/// @notice Internal function to set up vesting plans for multiple users.
+	/// @dev Reverts if the users and amounts arrays have different lengths.
+	/// @param token Address of the token.
+	/// @param startTime Vesting start time.
+	/// @param endTime Vesting end time.
+	/// @param users Array of user addresses.
+	/// @param amounts Array of token amounts.
+	function _setupVestingPlans(address token, uint256 startTime, uint256 endTime, address[] memory users, uint256[] memory amounts) internal {
+		if (users.length != amounts.length) revert MismatchArrays();
+		uint256 len = users.length;
+		for (uint256 i = 0; i < len; i++) {
+			address user = users[i];
+			uint256 amount = amounts[i];
+			totalVested[token] += amount;
+			VestingPlan storage vestingPlan = vestingPlans[token][user];
+			vestingPlan.setup(amount, startTime, endTime);
+			emit VestingPlanSetup(token, user, amount, startTime, endTime);
+		}
+	}
+
+	/// @notice Internal function to reset vesting plans for multiple users.
+	/// @dev Reverts if the users and amounts arrays have different lengths or if any user's claimed amount exceeds the new amount.
+	/// @param token Address of the token.
+	/// @param users Array of user addresses.
+	/// @param amounts Array of new token amounts.
+	function _resetVestingPlans(address token, address[] memory users, uint256[] memory amounts) internal {
+		if (users.length != amounts.length) revert MismatchArrays();
+		uint256 len = users.length;
+		for (uint256 i = 0; i < len; i++) {
+			address user = users[i];
+			uint256 amount = amounts[i];
+			// Claim any unlocked tokens before resetting.
+			_claimUnlockedToken(token, user);
+			VestingPlan storage vestingPlan = vestingPlans[token][user];
+			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
+			uint256 oldTotal = vestingPlan.unlockedAmount() + vestingPlan.lockedAmount();
+			vestingPlan.resetAmount(amount);
+			totalVested[token] = totalVested[token] - oldTotal + amount;
+			emit VestingPlanReset(token, user, amount);
+		}
+	}
 
 	/// @notice Checks if the contract holds enough of the token, and if not, calls a minting hook.
 	/// @param token The address of the token.
