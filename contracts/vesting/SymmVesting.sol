@@ -32,6 +32,7 @@ contract SymmVesting is Vesting {
 
 	error SlippageExceeded();
 	error ZeroDivision();
+	error MaxUsdcExceeded();
 
 	//--------------------------------------------------------------------------
 	// Constants
@@ -65,11 +66,13 @@ contract SymmVesting is Vesting {
 	///      Reverts if the SYMM vesting plan's locked amount is insufficient.
 	/// @param amount The amount of SYMM to use for adding liquidity.
 	/// @param minLpAmount The minimum acceptable LP token amount to receive (for slippage protection).
+	/// @param maxUsdcIn The maximum amount of USDC that can be used (for price protection).
 	/// @return amountsIn Array of token amounts used (SYMM and USDC).
 	/// @return lpAmount The amount of LP tokens minted.
 	function addLiquidity(
 		uint256 amount,
-		uint256 minLpAmount
+		uint256 minLpAmount,
+		uint256 maxUsdcIn
 	) external whenNotPaused nonReentrant returns (uint256[] memory amountsIn, uint256 lpAmount) {
 		// Claim any unlocked SYMM tokens first.
 		_claimUnlockedToken(SYMM, msg.sender);
@@ -81,7 +84,7 @@ contract SymmVesting is Vesting {
 		_ensureSufficientBalance(SYMM, amount);
 
 		// Add liquidity to the pool.
-		(amountsIn, lpAmount) = _addLiquidity(amount, minLpAmount);
+		(amountsIn, lpAmount) = _addLiquidity(amount, minLpAmount, maxUsdcIn);
 
 		// Update SYMM vesting plan by reducing the locked amount.
 		symmVestingPlan.resetAmount(symmLockedAmount - amountsIn[0]);
@@ -110,10 +113,14 @@ contract SymmVesting is Vesting {
 	/// @dev Transfers USDC from the caller, approves token spending for the VAULT, and interacts with the liquidity router.
 	/// @param symmIn The amount of SYMM to contribute.
 	/// @param minLpAmount The minimum acceptable LP token amount to receive (for slippage protection).
+	/// @param maxUsdcIn The maximum amount of USDC that can be used (for price protection).
 	/// @return amountsIn Array containing the amounts of SYMM and USDC used.
 	/// @return lpAmount The number of LP tokens minted.
-	function _addLiquidity(uint256 symmIn, uint256 minLpAmount) internal returns (uint256[] memory amountsIn, uint256 lpAmount) {
+	function _addLiquidity(uint256 symmIn, uint256 minLpAmount, uint256 maxUsdcIn) internal returns (uint256[] memory amountsIn, uint256 lpAmount) {
 		(uint256 usdcIn, uint256 expectedLpAmount) = getLiquidityQuote(symmIn);
+
+		// Check if usdcIn exceeds maxUsdcIn parameter
+		if (maxUsdcIn > 0 && usdcIn > maxUsdcIn) revert MaxUsdcExceeded();
 
 		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 95) / 100; // Default 5% slippage if not specified
 
