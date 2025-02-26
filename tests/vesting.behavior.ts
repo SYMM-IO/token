@@ -233,46 +233,6 @@ export function ShouldBehaveLikeVesting() {
 	})
 
 	describe("resetVestingPlans", () => {
-		it("Should fail if users and amount arrays mismatch", async () => {
-			const users = [await context.signers.user1.getAddress(), await context.signers.user2.getAddress()]
-			const amounts = ["1000"]
-
-			await expect(symmVesting.setupVestingPlans(await context.symmioToken.getAddress(), "0", "0", users, amounts)).to.be.revertedWithCustomError(
-				symmVesting,
-				"MismatchArrays",
-			)
-		})
-
-		it("Should fail if vestingPlan setup before", async () => {
-			const users = [await context.signers.user1.getAddress()]
-			const amounts = ["1000"]
-
-			await symmVesting.setupVestingPlans(await context.symmioToken.getAddress(), "0", "0", users, amounts)
-			await expect(symmVesting.setupVestingPlans(await context.symmioToken.getAddress(), "0", "0", users, amounts)).to.be.revertedWithCustomError(
-				vestingPlanOps,
-				"AlreadySetup",
-			)
-		})
-
-		it("Should setup vestingPlan successfully", async () => {
-			const users = [await context.signers.user1.getAddress()]
-			const amounts = ["1000"]
-			const oldTotalVesting = await symmVesting.totalVested(await context.symmioToken.getAddress())
-
-			expect(await symmVesting.setupVestingPlans(await context.symmioToken.getAddress(), "0", "0", users, amounts)).to.be.not.reverted
-
-			const plan = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
-			const newTotalVesting = await symmVesting.totalVested(await context.symmioToken.getAddress())
-
-			expect(newTotalVesting).to.be.equal(oldTotalVesting + "1000")
-
-			expect(plan.startTime).to.be.equal("0")
-			expect(plan.endTime).to.be.equal("0")
-			expect(plan.amount).to.be.equal(amounts[0])
-			expect(plan.claimedAmount).to.be.equal(0)
-		})
-	})
-	describe("resetVestingPlans", () => {
 		beforeEach(async () => {
 			await context.symmioToken.connect(context.signers.admin).mint(await symmVesting.getAddress(), 5000)
 
