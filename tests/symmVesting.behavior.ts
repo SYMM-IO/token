@@ -6,6 +6,7 @@ import { e } from "../utils"
 import { string } from "hardhat/internal/core/params/argumentTypes";
 import { expect } from "chai";
 import BigNumber from 'bignumber.js';
+import { max, min } from "lodash";
 
 export function shouldBehaveLikeSymmVesting() {
 	let symmVesting: SymmVesting
@@ -129,11 +130,24 @@ export function shouldBehaveLikeSymmVesting() {
 
 		it.only("should emit LiquidityAdded event for each addLiquidity with correct amounts", async () => {
 			// Define the number of liquidity additions we want to test
-			const liquidityAdditionsCount = BigInt(5);
+			const liquidityAdditionsCount = BigInt(100);
 
-			const minVal = e(0.1); // 0.1e18
-			const maxVal = e(1000); // 1000e18
-			const totalMax = e(10000); // 10000e18 = 1e22
+			// Setup vesting plans
+			const users = [await user2.getAddress()]
+			const amounts = [e(1e15)]
+			const startTime = Math.floor(Date.now() / 1000) - 1 * 30 * 24 * 60 * 60 // 1 months ago
+			const endTime = startTime + 9 * 30 * 24 * 60 * 60 // 9 months later
+			await symmVesting.connect(owner).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
+
+			await symmToken.connect(owner).grantRole(MINTER_ROLE, await symmVesting.getAddress())
+
+			const usdcTransferAmount = String(1e14);
+			await erc20.connect(usdcWhale).transfer(await user2.getAddress(), usdcTransferAmount)
+			await erc20.connect(user2).approve(await symmVesting.getAddress(), usdcTransferAmount)
+
+			const minVal = e(0.1);
+			const maxVal = e(1e5);
+			const totalMax = e(1e12);
 
 
 			// Check feasibility: if even the minimum for every element would exceed the total allowed.
@@ -169,11 +183,17 @@ export function shouldBehaveLikeSymmVesting() {
 				}
 				return result;
 			}
-			let sumUsdcDiff = BigInt(0);
-			let sumSymmDiff = BigInt(0);
-			let sumLPDiff = BigInt(0);
-			for (let i = 0; i < Number(liquidityAdditionsCount); i++) {
+			let sumUsdcDiff = Number(0);
+			let sumSymmDiff = Number(0);
+			let sumLPDiff = Number(0);
 
+			let sumUsdcIn = BigInt(0);
+			let sumSymmIn = BigInt(0);
+			let sumLPOut = BigInt(0);
+
+
+
+			for (let i = 0; i < Number(liquidityAdditionsCount); i++) {
 				const remainingCount = liquidityAdditionsCount - BigInt(i);
 				// Reserve the minimum for all remaining elements (excluding current one)
 				const reserved = (remainingCount - BigInt(1)) * minVal;
@@ -192,24 +212,20 @@ export function shouldBehaveLikeSymmVesting() {
 				currentSum += value;
 			}
 
-			console.log("SYMM Amount List:", symmAmountList);
-			console.log("minLp Amount List:", minLpAmountList);
+			// let symmAmountListCopy = symmAmountList.map(value => String(Number(value)/Number(1e18)))
+			// console.log("SYMM Amount List:", symmAmountListCopy);
+			// console.log("minLp Amount List:", minLpAmountList);
 
 
 			for (let i = 0; i < liquidityAdditionsCount; i++) {
 				const symmAmount = symmAmountList[i]
 				const minLpAmount = minLpAmountList[i]
 				// Get the liquidity quote before the liquidity addition
-				const [usdcAmount, expectedLpAmount] = await symmVesting.connect(user1).getLiquidityQuote(symmAmount);
+				const [usdcAmount, expectedLpAmount] = await symmVesting.connect(user2).getLiquidityQuote(symmAmount);
 
-				// Ensure the liquidity quote is correct
-				console.log(`Liquidity quote for addLiquidity #${i + 1}:`);
-				console.log(`Expected USDC: ${usdcAmount.toString()}`);
-				console.log(`Expected SYMM: ${symmAmount}`);
-				console.log(`Expected LP Amount: ${expectedLpAmount.toString()}`);
 
 				// Call addLiquidity and capture the transaction
-				const tx = await symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount);
+				const tx = await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcTransferAmount);
 				const receipt = await tx.wait()
 				for (const log of receipt?.logs) {
 					const parsedLog = symmVesting.interface.parseLog(log);
@@ -218,17 +234,32 @@ export function shouldBehaveLikeSymmVesting() {
 						const symmIn = parsedLog.args[1]
 						const usdcIn = parsedLog.args[2]
 						const lpOut = parsedLog.args[3]
-						sumUsdcDiff += usdcIn-BigInt(usdcAmount)
-						sumSymmDiff += symmIn-BigInt(symmAmount)
-						sumLPDiff += lpOut-BigInt(expectedLpAmount)
-						console.log(
-							symmIn, usdcIn, lpOut,
-							msg_sender, symmIn-BigInt(symmAmount), usdcIn-BigInt(usdcAmount), lpOut-BigInt(expectedLpAmount)
-						);
+						sumUsdcDiff += Number(usdcIn)-Number(usdcAmount)
+						sumSymmDiff += Number(symmIn)-Number(symmAmount)
+						sumLPDiff += Number(lpOut)-Number(expectedLpAmount)
+
+						sumUsdcIn += usdcIn;
+						sumSymmIn += symmIn;
+						sumLPOut += lpOut;
+
+						expect(usdcAmount).to.be.closeTo(usdcIn, 5)
+						expect(symmAmount).to.be.closeTo(symmIn, 5)
+						expect(expectedLpAmount).to.be.closeTo(lpOut, 5)
 					}
 				}
 			}
 			console.log(sumLPDiff, sumSymmDiff, sumUsdcDiff)
+			// console.log(Number(sumLPOut)/Number(1e18), Number(sumSymmIn, Number(sumUsdcIn)/Number(1e6))
+			// console.log(Number(sumLPOut)/Number(1e18)/Number(liquidityAdditionsCount), Number(sumSymmIn)/Number(1e18)/Number(liquidityAdditionsCount), Number(sumUsdcIn)/Number(1e6)/Number(liquidityAdditionsCount))
+			// console.log(min(symmAmountListCopy), max(symmAmountListCopy))
+
+			expect(sumUsdcDiff).to.be.closeTo(0, liquidityAdditionsCount)
+			expect(sumSymmDiff).to.be.closeTo(0, liquidityAdditionsCount)
+			expect(sumLPDiff).to.be.closeTo(0, liquidityAdditionsCount)
 		}).timeout(500000);
 	})
+
+	//TODO: add test for after end time test
+	//TODO: test it returns usdc/symm
+	//TODO: add test for maxUsdcIn
 }
