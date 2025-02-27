@@ -1,18 +1,15 @@
 import { setBalance } from "@nomicfoundation/hardhat-network-helpers"
+import { expect } from "chai"
 import { Signer } from "ethers"
 import { ethers, network, upgrades } from "hardhat"
 import { ERC20, Symmio, SymmVesting } from "../typechain-types"
 import { e } from "../utils"
-import { string } from "hardhat/internal/core/params/argumentTypes";
-import { expect } from "chai";
-import BigNumber from 'bignumber.js';
-import { max, min } from "lodash";
 
 export function shouldBehaveLikeSymmVesting() {
 	let symmVesting: SymmVesting
 	let symmToken: Symmio
 	let erc20: ERC20
-	let owner: Signer, user1: Signer, user2: Signer, vestingPenaltyReceiver: Signer, usdcWhale: Signer, user1UsdcAmount: String
+	let owner: Signer, user1: Signer, user2: Signer, vestingPenaltyReceiver: Signer, usdcWhale: Signer, user1UsdcAmount: bigint
 
 	const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6"
 	const INITIAL_BALANCE = e(100)
@@ -52,7 +49,7 @@ export function shouldBehaveLikeSymmVesting() {
 		await symmToken.connect(owner).grantRole(MINTER_ROLE, await owner.getAddress())
 		await symmToken.connect(owner).mint(await symmVesting.getAddress(), e("1000"))
 
-		user1UsdcAmount = String(1000e6)
+		user1UsdcAmount = BigInt(1000e6)
 		await erc20.connect(usdcWhale).transfer(await user1.getAddress(), user1UsdcAmount)
 		await erc20.connect(user1).approve(await symmVesting.getAddress(), user1UsdcAmount)
 
@@ -66,41 +63,53 @@ export function shouldBehaveLikeSymmVesting() {
 	})
 	describe("Add Liquidity", () => {
 		it("should allow a user to add liquidity successfully", async () => {
-			const symmAmount = e(1);
-			const minLpAmount = e('0.05');
+			const symmAmount = e(1)
+			const minLpAmount = e("0.05")
 
 			const lockedAmountBefore = await symmVesting.getLockedAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const claimableAmountBefore = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const unlockedAmountBefore = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
 
-			await symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount);
+			await symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)
 
 			const lockedAmountAfter = await symmVesting.getLockedAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const claimableAmountAfter = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const unlockedAmountAfter = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
 
-			await expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15));
-			await expect(claimableAmountBefore - claimableAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5));
-			expect(claimableAmountAfter).to.be.lessThan(1e5);
-			await expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5));
+			await expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15))
+			await expect(claimableAmountBefore - claimableAmountAfter).to.be.within(
+				BigInt(claimableAmountBefore),
+				BigInt(claimableAmountBefore) + BigInt(1e5),
+			)
+			expect(claimableAmountAfter).to.be.lessThan(1e5)
+			await expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(
+				BigInt(claimableAmountBefore),
+				BigInt(claimableAmountBefore) + BigInt(1e5),
+			)
 		})
 
 		it("should revert if slippage limit is exceeded", async () => {
-			const symmAmount = String(1e18);
-			const minLpAmount = e(200);
-			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.revertedWithCustomError(symmVesting, "SlippageExceeded")
+			const symmAmount = String(1e18)
+			const minLpAmount = e(200)
+			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.revertedWithCustomError(
+				symmVesting,
+				"SlippageExceeded",
+			)
 		})
 
 		it("should revert if user does not have enough locked SYMM", async () => {
-			const symmAmount = String(800e18);
-			const minLpAmount = 0;
-			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.revertedWithCustomError(symmVesting, "InvalidAmount")
+			const symmAmount = String(800e18)
+			const minLpAmount = 0
+			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.revertedWithCustomError(
+				symmVesting,
+				"InvalidAmount",
+			)
 		})
 
 		it("should mint SYMM if SymmVesting doesn't have enough balance", async () => {
-			const symmAmount = e('1100');
-			const minLpAmount = 0;
-			const symmVestingBalance = await symmToken.balanceOf(await symmVesting.getAddress());
+			const symmAmount = e("1100")
+			const minLpAmount = 0
+			const symmVestingBalance = await symmToken.balanceOf(await symmVesting.getAddress())
 
 			// Setup vesting plans
 			const users = [await user2.getAddress()]
@@ -113,10 +122,9 @@ export function shouldBehaveLikeSymmVesting() {
 			await expect(symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.ok
 		})
 
-
 		it("should emit LiquidityAdded event for each addLiquidity with correct amounts", async () => {
 			// Define the number of liquidity additions we want to test
-			const liquidityAdditionsCount = BigInt(100);
+			const liquidityAdditionsCount = BigInt(100)
 
 			// Setup vesting plans
 			const users = [await user2.getAddress()]
@@ -127,100 +135,96 @@ export function shouldBehaveLikeSymmVesting() {
 
 			await symmToken.connect(owner).grantRole(MINTER_ROLE, await symmVesting.getAddress())
 
-			const usdcTransferAmount = String(1e14);
+			const usdcTransferAmount = String(1e14)
 			await erc20.connect(usdcWhale).transfer(await user2.getAddress(), usdcTransferAmount)
 			await erc20.connect(user2).approve(await symmVesting.getAddress(), usdcTransferAmount)
 
-			const minVal = e(0.1);
-			const maxVal = e(1e7);
-			const totalMax = e(1e12);
-
+			const minVal = e(0.1)
+			const maxVal = e(1e7)
+			const totalMax = e(1e12)
 
 			// Check feasibility: if even the minimum for every element would exceed the total allowed.
 			if (liquidityAdditionsCount * minVal > totalMax) {
-				throw new Error("Cannot generate amounts: minimum sum exceeds total maximum allowed");
+				throw new Error("Cannot generate amounts: minimum sum exceeds total maximum allowed")
 			}
 
-			const symmAmountList = [];
-			const minLpAmountList = [];
-			let currentSum = BigInt(0);
+			const symmAmountList = []
+			const minLpAmountList = []
+			let currentSum = BigInt(0)
 
 			/**
 			 * Returns a random BigInt in the range [0, n)
 			 * using rejection sampling and 32-bit chunks.
 			 */
-			function randomBigInt(n) {
-				if (n <= BigInt(0)) return BigInt(0);
-				const bits = n.toString(2).length;
-				let result;
+			function randomBigInt(n: any) {
+				if (n <= BigInt(0)) return BigInt(0)
+				const bits = n.toString(2).length
+				let result
 				while (true) {
-					let r = BigInt(0);
+					let r = BigInt(0)
 					// Calculate how many 32-bit chunks we need.
-					const numChunks = Math.ceil(bits / 32);
+					const numChunks = Math.ceil(bits / 32)
 					for (let i = 0; i < numChunks; i++) {
 						// Generate a random 32-bit chunk.
-						const random32 = BigInt(Math.floor(Math.random() * 4294967296));
-						r = (r << BigInt(32)) + random32;
+						const random32 = BigInt(Math.floor(Math.random() * 4294967296))
+						r = (r << BigInt(32)) + random32
 					}
 					if (r < n) {
-						result = r;
-						break;
+						result = r
+						break
 					}
 				}
-				return result;
+				return result
 			}
-			let sumUsdcDiff = Number(0);
-			let sumSymmDiff = Number(0);
-			let sumLPDiff = Number(0);
-
+			let sumUsdcDiff = Number(0)
+			let sumSymmDiff = Number(0)
+			let sumLPDiff = Number(0)
 
 			for (let i = 0; i < Number(liquidityAdditionsCount); i++) {
-				const remainingCount = liquidityAdditionsCount - BigInt(i);
+				const remainingCount = liquidityAdditionsCount - BigInt(i)
 				// Reserve the minimum for all remaining elements (excluding current one)
-				const reserved = (remainingCount - BigInt(1)) * minVal;
+				const reserved = (remainingCount - BigInt(1)) * minVal
 				// Maximum allowed for this iteration without breaking the total constraint:
-				const allowed = totalMax - currentSum - reserved;
+				const allowed = totalMax - currentSum - reserved
 				// Use the smaller of allowed and maxVal:
-				const maxAllowedForThis = allowed < maxVal ? allowed : maxVal;
+				const maxAllowedForThis = allowed < maxVal ? allowed : maxVal
 
 				// Compute the range width (inclusive) and generate a random increment
-				const range = maxAllowedForThis - minVal + BigInt(1);
-				const randomIncrement = randomBigInt(range);
-				const value = minVal + randomIncrement;
+				const range = maxAllowedForThis - minVal + BigInt(1)
+				const randomIncrement = randomBigInt(range)
+				const value = minVal + randomIncrement
 
-				symmAmountList.push(value.toString());
-				minLpAmountList.push("0");
-				currentSum += value;
+				symmAmountList.push(value.toString())
+				minLpAmountList.push("0")
+				currentSum += value
 			}
-
 
 			for (let i = 0; i < liquidityAdditionsCount; i++) {
 				const symmAmount = symmAmountList[i]
 				const minLpAmount = minLpAmountList[i]
 				// Get the liquidity quote before the liquidity addition
-				const [usdcAmount, expectedLpAmount] = await symmVesting.connect(user2).getLiquidityQuote(symmAmount);
-
+				const [usdcAmount, expectedLpAmount] = await symmVesting.connect(user2).getLiquidityQuote(symmAmount)
 
 				// Call addLiquidity and capture the transaction
 				const userUsdcBalanceBefore = await erc20.balanceOf(await user2.getAddress())
-				const tx = await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcTransferAmount);
+				const tx = await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcTransferAmount)
 				const userUsdcBalanceAfter = await erc20.balanceOf(await user2.getAddress())
 				const receipt = await tx.wait()
-				for (const log of receipt?.logs) {
-					const parsedLog = symmVesting.interface.parseLog(log);
+				for (const log of receipt?.logs!) {
+					const parsedLog = symmVesting.interface.parseLog(log)
 					if (parsedLog?.name === "LiquidityAdded") {
 						const symmIn = parsedLog.args[1]
 						const usdcIn = parsedLog.args[2]
 						const lpOut = parsedLog.args[3]
-						sumUsdcDiff += Number(usdcIn)-Number(usdcAmount)
-						sumSymmDiff += Number(symmIn)-Number(symmAmount)
-						sumLPDiff += Number(lpOut)-Number(expectedLpAmount)
+						sumUsdcDiff += Number(usdcIn) - Number(usdcAmount)
+						sumSymmDiff += Number(symmIn) - Number(symmAmount)
+						sumLPDiff += Number(lpOut) - Number(expectedLpAmount)
 
 						expect(usdcAmount).to.be.closeTo(usdcIn, 5)
 						expect(symmAmount).to.be.closeTo(symmIn, 5)
 						expect(expectedLpAmount).to.be.closeTo(lpOut, 5)
 
-						expect(userUsdcBalanceBefore-userUsdcBalanceAfter).to.be.equal(Number(usdcIn))
+						expect(userUsdcBalanceBefore - userUsdcBalanceAfter).to.be.equal(Number(usdcIn))
 					}
 				}
 			}
@@ -228,19 +232,19 @@ export function shouldBehaveLikeSymmVesting() {
 			expect(sumUsdcDiff).to.be.closeTo(0, liquidityAdditionsCount)
 			expect(sumSymmDiff).to.be.closeTo(0, liquidityAdditionsCount)
 			expect(sumLPDiff).to.be.closeTo(0, liquidityAdditionsCount)
-		}).timeout(500000);
+		}).timeout(500000)
 
 		it("should revert if the contract tries to transferFrom more than maxUsdc even when it's approved", async () => {
-			const symmAmount = String(1e18);
-			const minLpAmount = 0;
-			const maxUsdcIn = 100;
-			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, maxUsdcIn)).to.be.revertedWithCustomError(symmVesting, "MaxUsdcExceeded")
+			const symmAmount = String(1e18)
+			const minLpAmount = 0
+			const maxUsdcIn = 100
+			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, maxUsdcIn)).to.be.revertedWithCustomError(
+				symmVesting,
+				"MaxUsdcExceeded",
+			)
 		})
 	})
 
-
 	//TODO: a scenario for claiming LP after add liq(better: a full lifecycle (start to end)"
 	//TODO: test it returns symm
-
-
 }

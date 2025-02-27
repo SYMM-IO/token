@@ -43,10 +43,11 @@ export const config: HardhatUserConfig = {
 			},
 		},
 	},
+
 	networks: {
 		hardhat: {
 			forking: {
-				url: "https://base.llamarpc.com",
+				url: "https://billowing-bold-orb.base-mainnet.quiknode.pro/cb749710585fa2356bc1eae4248334fe6cad2155/",
 				blockNumber: 26800831,
 			},
 		},
@@ -54,7 +55,10 @@ export const config: HardhatUserConfig = {
 			url: "https://ethereum.blockpi.network/v1/rpc/public",
 			accounts: accounts_list,
 		},
-
+		base: {
+			url: "https://mainnet.base.org",
+			accounts: accounts_list,
+		},
 		polygon: {
 			url: "https://rpc.ankr.com/polygon",
 			accounts: accounts_list,
@@ -63,6 +67,7 @@ export const config: HardhatUserConfig = {
 	etherscan: {
 		apiKey: {
 			polygon: "",
+			base: "XTVCAI6PVN4JSJVSFMX834388SUN5P7YV4",
 		},
 		customChains: [],
 	},
