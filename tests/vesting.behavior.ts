@@ -11,7 +11,7 @@ export function ShouldBehaveLikeVesting() {
 
 	beforeEach(async () => {
 		context = await loadFixture(initializeFixture)
-		symmVesting = context.vesting
+		symmVesting = await context.vesting
 		vestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
 	})
 
@@ -234,7 +234,7 @@ export function ShouldBehaveLikeVesting() {
 
 	describe("resetVestingPlans", () => {
 		beforeEach(async () => {
-			await context.symmioToken.connect(context.signers.admin).mint(await symmVesting.getAddress(), 5000)
+			await context.symmioToken.connect(context.signers.admin).mint(await symmVesting, 5000)
 
 			const users = [await context.signers.user1.getAddress()]
 			const amounts = ["1000"]

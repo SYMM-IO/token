@@ -1,15 +1,20 @@
-import { setBalance } from "@nomicfoundation/hardhat-network-helpers"
+import { loadFixture, setBalance, time } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai"
 import { Signer } from "ethers"
 import { ethers, network, upgrades } from "hardhat"
-import { ERC20, Symmio, SymmVesting } from "../typechain-types"
+import { ERC20, Symmio, SymmVesting, VestingPlanOps__factory } from "../typechain-types";
 import { e } from "../utils"
+import { initializeFixture, RunContext } from "./Initialize.fixture";
 
 export function shouldBehaveLikeSymmVesting() {
 	let symmVesting: SymmVesting
 	let symmToken: Symmio
 	let erc20: ERC20
-	let owner: Signer, user1: Signer, user2: Signer, vestingPenaltyReceiver: Signer, usdcWhale: Signer, user1UsdcAmount: bigint
+	let owner: Signer, admin: Signer, user1: Signer, user2: Signer, vestingPenaltyReceiver: Signer, usdcWhale: Signer
+	let pool: String
+	let context: RunContext
+	let VestingPlanOps: VestingPlanOps__factory
+	let user1UsdcAmount: bigint
 
 	const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6"
 	const INITIAL_BALANCE = e(100)
@@ -20,7 +25,15 @@ export function shouldBehaveLikeSymmVesting() {
 	}
 
 	beforeEach(async () => {
-		;[user1, vestingPenaltyReceiver, user2] = await ethers.getSigners()
+		context = await loadFixture(initializeFixture)
+		symmVesting = await context.vesting
+		VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
+
+		admin = context.signers.admin
+		user1 = context.signers.user1
+		user2 = context.signers.user2
+		vestingPenaltyReceiver = context.signers.user3
+		pool = await symmVesting.POOL()
 
 		owner = await impersonateAccount("0x8CF65060CdA270a3886452A1A1cb656BECEE5bA4")
 		usdcWhale = await impersonateAccount("0x607094ed3a8361bB5e94dD21bcBef2997b687478")
@@ -33,18 +46,12 @@ export function shouldBehaveLikeSymmVesting() {
 		symmToken = TokenFactory.attach("0x800822d361335b4d5F352Dac293cA4128b5B605f") as Symmio
 		erc20 = ERC20Factory.attach("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") as ERC20
 
-		const VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
 		const vestingPlanOps = await VestingPlanOps.deploy()
 		await vestingPlanOps.waitForDeployment()
 
 		const SymmVestingFactory = await ethers.getContractFactory("SymmVesting", {
 			libraries: { VestingPlanOps: await vestingPlanOps.getAddress() },
 		})
-		symmVesting = (await upgrades.deployProxy(SymmVestingFactory, [await owner.getAddress(), await vestingPenaltyReceiver.getAddress()], {
-			unsafeAllow: ["external-library-linking"],
-			initializer: "initialize",
-		})) as any
-		await symmVesting.waitForDeployment()
 
 		await symmToken.connect(owner).grantRole(MINTER_ROLE, await owner.getAddress())
 		await symmToken.connect(owner).mint(await symmVesting.getAddress(), e("1000"))
@@ -59,7 +66,7 @@ export function shouldBehaveLikeSymmVesting() {
 		const startTime = Math.floor(Date.now() / 1000) - 2 * 30 * 24 * 60 * 60 // 2 months ago
 		const endTime = startTime + 9 * 30 * 24 * 60 * 60 // 9 months later
 
-		await symmVesting.connect(owner).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
+		await symmVesting.connect(admin).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
 	})
 	describe("Add Liquidity", () => {
 		it("should allow a user to add liquidity successfully", async () => {
@@ -107,13 +114,20 @@ export function shouldBehaveLikeSymmVesting() {
 
 			// Setup vesting plans
 			const users = [await user2.getAddress()]
-			const amounts = [e("10000")]
-			const startTime = Math.floor(Date.now() / 1000) - 8 * 30 * 24 * 60 * 60 // 8 months ago
-			const endTime = startTime + 9 * 30 * 24 * 60 * 60 // 9 months after
-			await symmVesting.connect(owner).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
+			const amounts = [e(1e15)]
+			const startTime = Math.floor(Date.now() / 1000) - 1 * 30 * 24 * 60 * 60 // 1 months ago
+			const endTime = startTime + 9 * 30 * 24 * 60 * 60 // 9 months later
+			await symmVesting.connect(admin).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
+
+			await symmToken.connect(owner).grantRole(MINTER_ROLE, await symmVesting.getAddress())
+
+			const usdcAmount = String(1e8)
+			await erc20.connect(usdcWhale).transfer(await user2.getAddress(), usdcAmount)
+			await erc20.connect(user2).approve(await symmVesting.getAddress(), usdcAmount)
+
 			const diffBalance = symmAmount - symmVestingBalance
 			expect(diffBalance).to.be.greaterThan(0)
-			await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)
+			await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcAmount)
 		})
 
 		it("should emit LiquidityAdded event for each addLiquidity with correct amounts", async () => {
@@ -123,9 +137,9 @@ export function shouldBehaveLikeSymmVesting() {
 			// Setup vesting plans
 			const users = [await user2.getAddress()]
 			const amounts = [e(1e15)]
-			const startTime = Math.floor(Date.now() / 1000) - 1 * 30 * 24 * 60 * 60 // 1 months ago
+			const startTime = Math.floor(Date.now() / 1000) - 8 * 30 * 24 * 60 * 60 // 1 months ago
 			const endTime = startTime + 9 * 30 * 24 * 60 * 60 // 9 months later
-			await symmVesting.connect(owner).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
+			await symmVesting.connect(admin).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
 
 			await symmToken.connect(owner).grantRole(MINTER_ROLE, await symmVesting.getAddress())
 
@@ -237,8 +251,44 @@ export function shouldBehaveLikeSymmVesting() {
 				"MaxUsdcExceeded",
 			)
 		})
+
+	it('should claim lp tokens after add liquidity by the next addLiquidity' , async() => {
+		const lockedLPBefore1 = await symmVesting.getLockedAmountsForToken(user1, pool)
+		const unlockedSymmBefore1 = await symmVesting.getUnlockedAmountForToken(user1, symmToken)
+		await symmVesting.connect(user1).addLiquidity(e(100), 0, 0)
+		const query1 = await symmVesting.getLiquidityQuote(e(100))
+		const lockedLPAfter1 = await symmVesting.getLockedAmountsForToken(user1, pool)
+		const unlockedSymmAfter1 = await symmVesting.getUnlockedAmountForToken(user1, symmToken)
+		expect(lockedLPAfter1-lockedLPBefore1).to.be.closeTo(query1[1], 1000)
+		expect(unlockedSymmBefore1-unlockedSymmAfter1).to.be.greaterThan(0)
+
+		const lockedLPBefore2 = await symmVesting.getLockedAmountsForToken(user1, pool)
+		const symmBalanceBefore2 = await symmToken.balanceOf(user1)
+		const query2 = await symmVesting.getLiquidityQuote(e(1))
+		await symmVesting.connect(user1).addLiquidity(e(1), 0, 0)
+		const symmBalanceAfter2 = await symmToken.balanceOf(user1)
+		const lockedLPAfter2 = await symmVesting.getLockedAmountsForToken(user1, pool)
+		expect(lockedLPAfter2 - lockedLPBefore2).to.be.closeTo(query2.lpAmount, String(2e+13)) //2e13: unlocked amount during passed time of several calls
+		expect(symmBalanceAfter2 - symmBalanceBefore2).to.be.greaterThan(0)
 	})
 
-	//TODO: a scenario for claiming LP after add liq(better: a full lifecycle (start to end)"
-	//TODO: test it returns symm
+	it('should claim lp tokens after add liquidity by claimTokens' , async() => {
+		await symmVesting.connect(user1).addLiquidity(e(100), 0, 0)
+
+		await time.increase(1e7)
+
+		const unlockedSymmBefore = await symmVesting.getClaimableAmountsForToken(user1, symmToken)
+		const userSymmBalanceBefore = await symmToken.balanceOf(user1)
+		await symmVesting.connect(user1).claimUnlockedToken(symmToken, user1)
+		const userSymmBalanceAfter = await symmToken.balanceOf(user1)
+		const unlockedSymmAfter = await symmVesting.getClaimableAmountsForToken(user1, symmToken)
+		expect(unlockedSymmAfter).to.be.lessThan(unlockedSymmBefore)
+		expect(userSymmBalanceAfter).to.be.greaterThan(userSymmBalanceBefore)
+
+		const unlockedLPBefore = await symmVesting.getClaimableAmountsForToken(user1, pool)
+		await symmVesting.connect(user1).claimUnlockedToken(pool, user1)
+		const unlockedLPAfter = await symmVesting.getClaimableAmountsForToken(user1, pool)
+		expect(unlockedLPAfter).to.be.lessThan(unlockedLPBefore)
+	})
+	})
 }

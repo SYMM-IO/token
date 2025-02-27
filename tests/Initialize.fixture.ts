@@ -2,6 +2,7 @@ import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { ethers, run } from "hardhat"
 import { e } from "../utils"
 import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking } from "../typechain-types"
+import * as Process from "process";
 
 export class RunContext {
 	signers!: {
@@ -9,6 +10,7 @@ export class RunContext {
 		setter: SignerWithAddress
 		user1: SignerWithAddress
 		user2: SignerWithAddress
+		user3: SignerWithAddress
 		symmioFoundation: SignerWithAddress
 		vestingPenaltyReceiver: SignerWithAddress
 	}
@@ -26,6 +28,7 @@ export async function initializeFixture(): Promise<RunContext> {
 		setter: signers[1],
 		user1: signers[2],
 		user2: signers[3],
+		user3: signers[4],
 		symmioFoundation: signers[4],
 		vestingPenaltyReceiver: signers[5],
 	}
@@ -47,14 +50,14 @@ export async function initializeFixture(): Promise<RunContext> {
 	context.vesting = await run("deploy:Vesting", {
 		admin: await context.signers.admin.getAddress(),
 		lockedClaimPenaltyReceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+		pool: Process.env.POOL,
+		router: Process.env.ROUTER,
+		permit2: Process.env.PERMIT2,
+		vault: Process.env.VAULT,
+		symm: Process.env.SYMM,
+		usdc: Process.env.USDC,
+		symmLp: Process.env.SYMM_LP
 	})
-
-	// context.vesting = await run("deploy:Vesting", {
-	// 	admin: context.signers.admin.getAddress(),
-	// 	totalTime: "23328000", //9 months: 9*30*24*60*60
-	// 	startTime: Math.floor(Date.now() / 1000) - 5184000, //two months: 2*30*24*60*60,
-	// 	symmAddress: context.symmioToken.getAddress()
-	// })
 
 	context.symmStaking = await run("deploy:SymmStaking", {
 		admin: await context.signers.admin.getAddress(),
