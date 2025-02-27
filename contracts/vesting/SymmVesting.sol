@@ -13,6 +13,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// @notice Extends Vesting to add liquidity functionality for SYMM and SYMM LP tokens.
 /// @dev Inherits pausable functionality and vesting plan management from Vesting.
 contract SymmVesting is Vesting {
+	using SafeERC20 for IERC20;
 	using VestingPlanOps for VestingPlan;
 
 	//--------------------------------------------------------------------------
@@ -35,16 +36,16 @@ contract SymmVesting is Vesting {
 	error MaxUsdcExceeded();
 
 	//--------------------------------------------------------------------------
-	// Constants
+	// State Variables
 	//--------------------------------------------------------------------------
 
-	IPool public constant POOL = IPool(address(0x94Bf449AB92be226109f2Ed3CE2b297Db94bD995));
-	IRouter public constant ROUTER = IRouter(address(0x76578ecf9a141296Ec657847fb45B0585bCDa3a6));
-	IPermit2 public constant PERMIT2 = IPermit2(address(0x000000000022D473030F116dDEE9F6B43aC78BA3));
-	address public constant VAULT = address(0xbA1333333333a1BA1108E8412f11850A5C319bA9);
-	address public constant SYMM = address(0x800822d361335b4d5F352Dac293cA4128b5B605f);
-	address public constant USDC = address(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
-	address public constant SYMM_LP = address(0x94Bf449AB92be226109f2Ed3CE2b297Db94bD995);
+	IPool public POOL;
+	IRouter public ROUTER;
+	IPermit2 public PERMIT2;
+	address public VAULT;
+	address public SYMM;
+	address public USDC;
+	address public SYMM_LP;
 
 	//--------------------------------------------------------------------------
 	// Initialization
@@ -53,8 +54,36 @@ contract SymmVesting is Vesting {
 	/// @notice Initializes the SymmVesting contract.
 	/// @param admin Address to receive the admin and role assignments.
 	/// @param _lockedClaimPenaltyReceiver Address that receives the locked claim penalty.
-	function initialize(address admin, address _lockedClaimPenaltyReceiver) public initializer {
+	function initialize(
+		address admin,
+		address _lockedClaimPenaltyReceiver,
+		address _pool,
+		address _router,
+		address _permit2,
+		address _vault,
+		address _symm,
+		address _usdc,
+		address _symm_lp
+	) public initializer {
+		if (
+			admin == address(0) ||
+			_lockedClaimPenaltyReceiver == address(0) ||
+			_pool == address(0) ||
+			_router == address(0) ||
+			_permit2 == address(0) ||
+			_vault == address(0) ||
+			_symm == address(0) ||
+			_usdc == address(0) ||
+			_symm_lp == address(0)
+		) revert ZeroAddress();
 		__vesting_init(admin, 500000000000000000, _lockedClaimPenaltyReceiver);
+		POOL = IPool(_pool);
+		ROUTER = IRouter(_router);
+		PERMIT2 = IPermit2(_permit2);
+		VAULT = _vault;
+		SYMM = _symm;
+		USDC = _usdc;
+		SYMM_LP = _symm_lp;
 	}
 
 	//--------------------------------------------------------------------------
@@ -79,7 +108,7 @@ contract SymmVesting is Vesting {
 
 		VestingPlan storage symmVestingPlan = vestingPlans[SYMM][msg.sender];
 		uint256 symmLockedAmount = symmVestingPlan.lockedAmount();
-		if (symmLockedAmount <= amount) revert InvalidAmount();
+		if (symmLockedAmount < amount) revert InvalidAmount();
 
 		_ensureSufficientBalance(SYMM, amount);
 
@@ -129,7 +158,7 @@ contract SymmVesting is Vesting {
 		(IERC20 symm, IERC20 usdc) = (poolTokens[0], poolTokens[1]);
 
 		// Pull USDC from the user and approve the VAULT.
-		usdc.transferFrom(msg.sender, address(this), usdcIn);
+		usdc.safeTransferFrom(msg.sender, address(this), usdcIn);
 		usdc.approve(address(PERMIT2), usdcIn);
 		symm.approve(address(PERMIT2), symmIn);
 		PERMIT2.approve(SYMM, address(ROUTER), uint160(symmIn), uint48(block.timestamp));
@@ -151,7 +180,7 @@ contract SymmVesting is Vesting {
 		);
 
 		// Return unused usdc
-		if (usdcIn - amountsIn[1] > 0) usdc.transfer(msg.sender, usdcIn);
+		if (usdcIn - amountsIn[1] > 0) usdc.safeTransfer(msg.sender, usdcIn - amountsIn[1]);
 
 		// Calculate actual LP tokens received by comparing balances.
 		uint256 newLpBalance = IERC20(SYMM_LP).balanceOf(address(this));
