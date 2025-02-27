@@ -76,16 +76,10 @@ export function shouldBehaveLikeSymmVesting() {
 			const claimableAmountAfter = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const unlockedAmountAfter = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
 
-			await expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15))
-			await expect(claimableAmountBefore - claimableAmountAfter).to.be.within(
-				BigInt(claimableAmountBefore),
-				BigInt(claimableAmountBefore) + BigInt(1e5),
-			)
+			expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15))
+			expect(claimableAmountBefore - claimableAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
 			expect(claimableAmountAfter).to.be.lessThan(1e5)
-			await expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(
-				BigInt(claimableAmountBefore),
-				BigInt(claimableAmountBefore) + BigInt(1e5),
-			)
+			expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
 		})
 
 		it("should revert if slippage limit is exceeded", async () => {
@@ -118,8 +112,8 @@ export function shouldBehaveLikeSymmVesting() {
 			const endTime = startTime + 9 * 30 * 24 * 60 * 60 // 9 months after
 			await symmVesting.connect(owner).setupVestingPlans(await symmToken.getAddress(), startTime, endTime, users, amounts)
 			const diffBalance = symmAmount - symmVestingBalance
-			await expect(diffBalance).to.be.greaterThan(0)
-			await expect(symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.ok
+			expect(diffBalance).to.be.greaterThan(0)
+			await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)
 		})
 
 		it("should emit LiquidityAdded event for each addLiquidity with correct amounts", async () => {
