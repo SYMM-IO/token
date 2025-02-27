@@ -4,7 +4,14 @@ import { HardhatRuntimeEnvironment } from "hardhat/types"
 task("deploy:Vesting", "Deploys the Vesting contract")
 	.addParam("admin", "The admin of the Vesting contract")
 	.addParam("lockedClaimPenaltyReceiver", "Address that receives the penalty")
-	.setAction(async ({ admin, lockedClaimPenaltyReceiver }, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
+	.addParam("pool", "Address of the pool")
+	.addParam("router", "Address of the router")
+	.addParam("permit2", "Address of the permit2")
+	.addParam("vault", "Address of the vault")
+	.addParam("symm", "Address of symm token")
+	.addParam("usdc", "Address of usdc token")
+	.addParam("symmLp", "Address of symmLp token")
+	.setAction(async ({ admin, lockedClaimPenaltyReceiver, pool, router, permit2, vault, symm, usdc, symmLp }, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
 		console.log("deploy:Vesting")
 
 		const VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
@@ -16,7 +23,7 @@ task("deploy:Vesting", "Deploys the Vesting contract")
 				VestingPlanOps: await vestingPlanOps.getAddress(),
 			},
 		})
-		const vestingContract = await upgrades.deployProxy(VestingFactory, [admin, lockedClaimPenaltyReceiver], {
+		const vestingContract = await upgrades.deployProxy(VestingFactory, [admin, lockedClaimPenaltyReceiver, pool, router, permit2, vault, symm, usdc, symmLp ], {
 			unsafeAllow: ["external-library-linking"],
 			initializer: "initialize",
 		})
