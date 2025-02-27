@@ -15,6 +15,14 @@ describe("Symmio Token", () => {
 				shouldBehaveLikeSymmAllocationClaimer()
 			})
 
+			// describe("Airdrop Helper", async function () {
+			// 	shouldBehaveLikeAirdropHelper() // Not adapted
+			// })
+
+			describe("Symm Staking", async function () {
+				shouldBehaveLikeSymmStaking()
+			})
+
 			describe("Vesting", async function () {
 				ShouldBehaveLikeVesting()
 			})
@@ -22,15 +30,9 @@ describe("Symmio Token", () => {
 	} else if (process.env.TEST_MODE === "dynamic") {
 		// Dynamic tests
 		describe("Dynamic Tests", async function () {
-			// describe("Airdrop Helper", async function () {
-			// 	shouldBehaveLikeAirdropHelper()
-			// })
 			describe("Symm Vesting", async function () {
 				shouldBehaveLikeSymmVesting()
 			})
-		})
-		describe.only("Symm Staking", async function () {
-			shouldBehaveLikeSymmStaking()
 		})
 	}
 })
