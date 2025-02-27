@@ -1,8 +1,8 @@
-import { initializeFixture, RunContext } from "./Initialize.fixture"
-import { SymmVesting, VestingPlanOps__factory } from "../typechain-types"
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
 import { ethers, network } from "hardhat"
+import { SymmVesting, VestingPlanOps__factory } from "../typechain-types"
+import { initializeFixture, RunContext } from "./Initialize.fixture"
 
 export function ShouldBehaveLikeVesting() {
 	let context: RunContext

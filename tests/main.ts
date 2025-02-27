@@ -1,8 +1,8 @@
-import { shouldBehaveLikeSymmAllocationClaimer } from "./symmAllocationClaimer.bhavior"
+import { shouldBehaveLikeSymmAllocationClaimer } from "./symmAllocationClaimer.behavior"
 import { shouldBehaveLikeSymmioToken } from "./symmioToken.behavior"
+import { shouldBehaveLikeSymmStaking } from "./symmStaking.behavior"
 import { shouldBehaveLikeSymmVesting } from "./symmVesting.behavior"
 import { ShouldBehaveLikeVesting } from "./vesting.behavior"
-
 
 describe("Symmio Token", () => {
 	if (process.env.TEST_MODE === "static") {
@@ -32,5 +32,5 @@ describe("Symmio Token", () => {
 		describe.only("Symm Staking", async function () {
 			shouldBehaveLikeSymmStaking()
 		})
-	})
+	}
 })

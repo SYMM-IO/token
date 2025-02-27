@@ -7,10 +7,10 @@ import "hardhat-gas-reporter"
 import { HardhatUserConfig } from "hardhat/config"
 import "solidity-coverage"
 
-import "./tasks/SymmAllocationClaimer"
+import "./tasks/symmAllocationClaimer"
 import "./tasks/symmioToken"
 import "./tasks/symmVesting"
-import "./tasks/Vesting";
+import "./tasks/symmStaking";
 
 dotenv.config()
 
