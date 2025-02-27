@@ -1,7 +1,8 @@
-import { ethers, run } from "hardhat"
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
+import { ethers, run } from "hardhat"
 import { e } from "../utils"
 import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking } from "../typechain-types";
+
 
 export class RunContext {
 	signers!: {
@@ -10,11 +11,13 @@ export class RunContext {
 		user1: SignerWithAddress
 		user2: SignerWithAddress
 		symmioFoundation: SignerWithAddress
+		vestingPenaltyReceiver: SignerWithAddress
 	}
 	symmioToken!: Symmio
 	claimSymm!: SymmAllocationClaimer
 	vesting!: Vesting
 	symmStaking !: SymmStaking
+
 }
 
 export async function initializeFixture(): Promise<RunContext> {
@@ -26,6 +29,7 @@ export async function initializeFixture(): Promise<RunContext> {
 		user1: signers[2],
 		user2: signers[3],
 		symmioFoundation: signers[4],
+		vestingPenaltyReceiver: signers[5],
 	}
 
 	context.symmioToken = await run("deploy:SymmioToken", {
@@ -42,6 +46,11 @@ export async function initializeFixture(): Promise<RunContext> {
 		mintFactor: "500000000000000000", //5e17 => %50
 	})
 
+
+	context.vesting = await run("deploy:Vesting", {
+		admin: await context.signers.admin.getAddress(),
+		lockedClaimPenaltyReceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+
 	// context.vesting = await run("deploy:Vesting", {
 	// 	admin: context.signers.admin.getAddress(),
 	// 	totalTime: "23328000", //9 months: 9*30*24*60*60
@@ -53,6 +62,8 @@ export async function initializeFixture(): Promise<RunContext> {
 		admin: await context.signers.admin.getAddress(),
 		stakingToken: await context.symmioToken.getAddress()
 	})
+
+	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)
 
 	const roles = [
 		await context.claimSymm.SETTER_ROLE(),

@@ -54,7 +54,7 @@ library VestingPlanOps {
 	/// @param endTime End time of vesting.
 	/// @return The updated vesting plan.
 	function setup(VestingPlan storage self, uint256 amount, uint256 startTime, uint256 endTime) public returns (VestingPlan storage) {
-		if (self.amount != 0) revert AlreadySetup();
+		if (isSetup(self)) revert AlreadySetup();
 		self.startTime = startTime;
 		self.endTime = endTime;
 		self.amount = amount;
@@ -69,7 +69,7 @@ library VestingPlanOps {
 	/// @return The updated vesting plan.
 	function resetAmount(VestingPlan storage self, uint256 amount) public returns (VestingPlan storage) {
 		if (claimable(self) != 0) revert ShouldClaimFirst();
-		if (self.amount == 0) revert ShouldSetupFirst();
+		if (!isSetup(self)) revert ShouldSetupFirst();
 		// Rebase the vesting plan from now.
 		uint256 remaining = remainingDuration(self);
 		self.startTime = block.timestamp;
@@ -77,5 +77,12 @@ library VestingPlanOps {
 		self.amount = amount;
 		self.claimedAmount = 0;
 		return self;
+	}
+
+	/// @notice Checks if a vesting plan is already set up.
+	/// @param self The vesting plan.
+	/// @return True if the vesting plan is set up, false otherwise.
+	function isSetup(VestingPlan storage self) public view returns (bool) {
+		return self.amount != 0;
 	}
 }

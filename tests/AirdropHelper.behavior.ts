@@ -4,7 +4,7 @@ import { Signer } from "ethers"
 import { ethers, network } from "hardhat"
 import { AirdropHelper, Symmio } from "../typechain-types"
 
-describe("AirdropHelper", () => {
+export function shouldBehaveLikeAirdropHelper(): void {
 	// Contract instances
 	let airdropHelper: AirdropHelper
 	let symmToken: Symmio
@@ -211,7 +211,6 @@ describe("AirdropHelper", () => {
 
 	describe("Admin Functions", () => {
 		it("should clear airdrop configuration", async () => {
-
 			const recipients = [await user1.getAddress(), await user2.getAddress(), await user3.getAddress()]
 			const amounts = [ethers.parseEther("10"), ethers.parseEther("20"), ethers.parseEther("30")]
 			await airdropHelper.connect(owner).configureAirdrop(recipients, amounts)
@@ -225,7 +224,9 @@ describe("AirdropHelper", () => {
 		})
 
 		it("should rescue accidentally sent tokens", async () => {
-			await expect(airdropHelper.connect(owner).rescueFunds(ADDRESSES.SYMM)).to.emit(airdropHelper, "FundsRescued").withArgs(ADDRESSES.SYMM, ethers.parseEther("1000"))
+			await expect(airdropHelper.connect(owner).rescueFunds(ADDRESSES.SYMM))
+				.to.emit(airdropHelper, "FundsRescued")
+				.withArgs(ADDRESSES.SYMM, ethers.parseEther("1000"))
 		})
 
 		it("should revert rescuing tokens with zero address", async () => {
@@ -247,4 +248,4 @@ describe("AirdropHelper", () => {
 			expect(await airdropHelper.getRemainingAirdrops()).to.equal(1)
 		})
 	})
-})
+}

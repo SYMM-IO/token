@@ -24,4 +24,6 @@ interface IPool {
      * @return tokens List of tokens in the pool, sorted in registration order
      */
     function getTokens() external view returns (IERC20[] memory tokens);
+
+    function approve(address spender, uint256 amount) external returns (bool);
 }
