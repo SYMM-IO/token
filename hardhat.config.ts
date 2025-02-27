@@ -48,7 +48,7 @@ export const config: HardhatUserConfig = {
 	networks: {
 		hardhat: {
 			forking: {
-				url: "https://billowing-bold-orb.base-mainnet.quiknode.pro/cb749710585fa2356bc1eae4248334fe6cad2155/",
+				url: "",
 				blockNumber: 26800831,
 			},
 		},
@@ -68,7 +68,7 @@ export const config: HardhatUserConfig = {
 	etherscan: {
 		apiKey: {
 			polygon: "",
-			base: "XTVCAI6PVN4JSJVSFMX834388SUN5P7YV4",
+			base: "",
 		},
 		customChains: [],
 	},
