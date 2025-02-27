@@ -3,6 +3,7 @@ import { shouldBehaveLikeSymmioToken } from "./symmioToken.behavior"
 import { shouldBehaveLikeSymmVesting } from "./symmVesting.behavior"
 import { ShouldBehaveLikeVesting } from "./vesting.behavior"
 
+
 describe("Symmio Token", () => {
 	if (process.env.TEST_MODE === "static") {
 		describe("Static Tests", async function () {
@@ -28,5 +29,8 @@ describe("Symmio Token", () => {
 				shouldBehaveLikeSymmVesting()
 			})
 		})
-	}
+		describe.only("Symm Staking", async function () {
+			shouldBehaveLikeSymmStaking()
+		})
+	})
 })

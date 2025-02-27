@@ -21,7 +21,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	// Constants
 	//--------------------------------------------------------------------------
 
-	address public constant STAKING_TOKEN = 0x800822d361335b4d5F352Dac293cA4128b5B605f;
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
 
 	bytes32 public constant REWARD_MANAGER_ROLE = keccak256("REWARD_MANAGER_ROLE");
@@ -51,6 +50,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	error ArraysMismatched();
 
 	/// @notice Thrown when there is an already ongoing reward period for this token.
+	//TODO: params
 	error OngoingRewardPeriodForToken(address token, uint256 pendingRewards);
 
 	/// @notice Thrown when the whitelist status is already set.
@@ -100,6 +100,13 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 */
 	event UpdateWhitelist(address indexed token, bool whitelist);
 
+	/**
+	 * @notice Emitted when admin rescue tokens.
+	 * @param token the token address.
+	 * @param amount the amount to be rescued.
+	 */
+	event RescueToken(address token, uint256 amount, address receiver);
+
 	//--------------------------------------------------------------------------
 	// Structs
 	//--------------------------------------------------------------------------
@@ -115,6 +122,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	//--------------------------------------------------------------------------
 	// State Variables
 	//--------------------------------------------------------------------------
+	address public stakingToken;
 
 	uint256 public totalSupply;
 	mapping(address => uint256) public balanceOf;
@@ -142,12 +150,14 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @notice Initializes the staking contract.
 	 * @param admin The admin of the contract.
 	 */
-	function initialize(address admin) external initializer {
+	function initialize(address admin, address _stakingToken) external initializer {
 		__AccessControlEnumerable_init();
 		__ReentrancyGuard_init();
 		__Pausable_init();
 
-		if (admin == address(0)) revert ZeroAddress();
+		if (admin == address(0) || _stakingToken == address(0)) revert ZeroAddress();
+
+		stakingToken = _stakingToken;
 
 		_grantRole(DEFAULT_ADMIN_ROLE, admin);
 		_grantRole(REWARD_MANAGER_ROLE, admin);
@@ -226,8 +236,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 
 		if (amount == 0) revert ZeroAmount();
 		if (receiver == address(0)) revert ZeroAddress();
-
-		IERC20(STAKING_TOKEN).safeTransferFrom(msg.sender, address(this), amount);
+		IERC20(stakingToken).safeTransferFrom(msg.sender, address(this), amount);
 		totalSupply += amount;
 		balanceOf[receiver] += amount;
 		emit Deposit(msg.sender, amount, receiver);
@@ -244,13 +253,10 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (amount == 0) revert ZeroAmount();
 		if (to == address(0)) revert ZeroAddress();
 		if (amount > balanceOf[msg.sender]) revert InsufficientBalance(balanceOf[msg.sender], amount);
-
-		IERC20(STAKING_TOKEN).safeTransfer(to, amount);
+		IERC20(stakingToken).safeTransfer(to, amount);
 		totalSupply -= amount;
 		balanceOf[msg.sender] -= amount;
 		emit Withdraw(msg.sender, amount, to);
-
-		_updateRewardsStates(msg.sender);
 	}
 
 	/**
@@ -311,7 +317,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 
 		isRewardToken[token] = status;
 		if (!status) {
-			if (pendingRewards[token] != 0) revert OngoingRewardPeriodForToken(token, pendingRewards[token]);
+			if (pendingRewards[token] > 10) revert OngoingRewardPeriodForToken(token, pendingRewards[token]);
 			uint256 len = rewardTokens.length;
 			for (uint256 i = 0; i < len; i++) {
 				if (rewardTokens[i] == token) {
@@ -326,6 +332,17 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		}
 
 		emit UpdateWhitelist(token, status);
+	}
+
+	/**
+	 * @notice Withdraw specific amount of token.
+	 * @param token The token address.
+	 * @param amount The amount.
+	 * @param receiver The address of receiver
+	 */
+	function rescueTokens(address token, uint256 amount, address receiver) external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
+		IERC20(token).safeTransfer(receiver, amount);
+		emit RescueToken(token, amount, receiver);
 	}
 
 	/**

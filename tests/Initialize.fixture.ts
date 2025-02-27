@@ -1,6 +1,8 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { ethers, run } from "hardhat"
-import { SymmAllocationClaimer, Symmio, SymmVesting, Vesting } from "../typechain-types"
+import { e } from "../utils"
+import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking } from "../typechain-types";
+
 
 export class RunContext {
 	signers!: {
@@ -13,7 +15,9 @@ export class RunContext {
 	}
 	symmioToken!: Symmio
 	claimSymm!: SymmAllocationClaimer
-	vesting!: SymmVesting
+	vesting!: Vesting
+	symmStaking !: SymmStaking
+
 }
 
 export async function initializeFixture(): Promise<RunContext> {
@@ -42,9 +46,21 @@ export async function initializeFixture(): Promise<RunContext> {
 		mintFactor: "500000000000000000", //5e17 => %50
 	})
 
+
 	context.vesting = await run("deploy:Vesting", {
 		admin: await context.signers.admin.getAddress(),
 		lockedClaimPenaltyReceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+
+	// context.vesting = await run("deploy:Vesting", {
+	// 	admin: context.signers.admin.getAddress(),
+	// 	totalTime: "23328000", //9 months: 9*30*24*60*60
+	// 	startTime: Math.floor(Date.now() / 1000) - 5184000, //two months: 2*30*24*60*60,
+	// 	symmAddress: context.symmioToken.getAddress()
+	// })
+
+	context.symmStaking = await run("deploy:SymmStaking", {
+		admin: await context.signers.admin.getAddress(),
+		stakingToken: await context.symmioToken.getAddress()
 	})
 
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)
@@ -58,6 +74,8 @@ export async function initializeFixture(): Promise<RunContext> {
 	for (const role of roles) await context.claimSymm.grantRole(role, await context.signers.admin.getAddress())
 
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.claimSymm.getAddress())
+	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.signers.admin.getAddress())
+	await context.symmStaking.grantRole(await context.symmStaking.REWARD_MANAGER_ROLE(), await context.signers.admin.getAddress());
 
 	return context
 }
