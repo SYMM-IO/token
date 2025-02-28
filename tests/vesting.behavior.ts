@@ -1,18 +1,25 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
-import { ethers, network } from "hardhat"
-import { SymmVesting, VestingPlanOps__factory } from "../typechain-types"
+import { ethers, network, upgrades } from "hardhat";
+import { Symmio, SymmVesting, VestingPlanOps__factory } from "../typechain-types";
 import { initializeFixture, RunContext } from "./Initialize.fixture"
+import { Signer } from "ethers";
+import {e} from "../utils"
 
 export function ShouldBehaveLikeVesting() {
 	let context: RunContext
 	let symmVesting: SymmVesting
 	let vestingPlanOps: VestingPlanOps__factory
+	let admin: Signer, user1: Signer
+	let symmToken: Symmio
 
 	beforeEach(async () => {
 		context = await loadFixture(initializeFixture)
 		symmVesting = await context.vesting
 		vestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
+		symmToken = context.symmioToken
+		admin = context.signers.admin
+		user1 = context.signers.user1
 	})
 
 	describe("__vesting_init", () => {
@@ -282,7 +289,6 @@ export function ShouldBehaveLikeVesting() {
 			const token = await context.symmioToken.getAddress()
 
 			const plan = await symmVesting.vestingPlans(token, user)
-			console.log("Claimed After Reset:", plan.claimedAmount.toString())
 
 			const midTime = Math.floor(Number((plan.startTime + plan.endTime) / BigInt(2)))
 
@@ -304,6 +310,255 @@ export function ShouldBehaveLikeVesting() {
 
 			const planAfter = await symmVesting.vestingPlans(token, user)
 			expect(planAfter.claimedAmount).to.equal(0)
+		})
+	})
+
+	describe("modifiers",  ()=>{
+		it('should allow PAUSER_ROLE to pause and unpase the contract', async()=>{
+			await symmVesting.connect(admin).pause()
+			await expect(await symmVesting.paused()).to.be.true
+
+			await expect(symmVesting.connect(admin).resetVestingPlans(
+				await symmToken.getAddress(), [await user1.getAddress()], [e(1)]
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).setupVestingPlans(
+				await symmToken.getAddress(),
+				Math.floor(Date.now() / 1000),
+				Math.floor(Date.now() / 1000)+3600,
+				[await user1.getAddress()],
+				[e(1)]
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).setupVestingPlans(
+				await symmToken.getAddress(),
+				Math.floor(Date.now() / 1000),
+				Math.floor(Date.now() / 1000)+3600,
+				[await user1.getAddress()],
+				[e(1)]
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).claimUnlockedToken(
+				await symmToken.getAddress()
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).claimUnlockedTokenFor(
+				await symmToken.getAddress(),
+				await user1.getAddress()
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).claimLockedToken(
+				await symmToken.getAddress(),
+				await user1.getAddress()
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).claimLockedTokenByPercentage(
+				await symmToken.getAddress(),
+				e(5e-1)
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).claimLockedTokenFor(
+				await symmToken.getAddress(),
+				await user1.getAddress(),
+				e(10)
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(admin).claimLockedTokenForByPercentage(
+				await symmToken.getAddress(),
+				await user1.getAddress(),
+				e(10)
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await expect(symmVesting.connect(user1).addLiquidity(
+				e(1),
+				0,
+				0
+			)).to.be.revertedWithCustomError(symmVesting, "EnforcedPause")
+
+			await symmVesting.connect(admin).unpause()
+			await expect(await symmVesting.paused()).to.be.false
+
+			await expect(symmVesting.connect(admin).resetVestingPlans(
+				await symmToken.getAddress(), [await user1.getAddress()], [e(1)]
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).setupVestingPlans(
+				await symmToken.getAddress(),
+				Math.floor(Date.now() / 1000),
+				Math.floor(Date.now() / 1000)+3600,
+				[await user1.getAddress()],
+				[e(1)]
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).setupVestingPlans(
+				await symmToken.getAddress(),
+				Math.floor(Date.now() / 1000),
+				Math.floor(Date.now() / 1000)+3600,
+				[await user1.getAddress()],
+				[e(1)]
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).claimUnlockedToken(
+				await symmToken.getAddress()
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).claimUnlockedTokenFor(
+				await symmToken.getAddress(),
+				await user1.getAddress()
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).claimLockedToken(
+				await symmToken.getAddress(),
+				await user1.getAddress()
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).claimLockedTokenByPercentage(
+				await symmToken.getAddress(),
+				e(5e-1)
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).claimLockedTokenFor(
+				await symmToken.getAddress(),
+				await user1.getAddress(),
+				e(10)
+			)).to.be.ok
+
+			await expect(symmVesting.connect(admin).claimLockedTokenForByPercentage(
+				await symmToken.getAddress(),
+				await user1.getAddress(),
+				e(10)
+			)).to.be.ok
+
+			await expect(symmVesting.connect(user1).addLiquidity(
+				e(1),
+				0,
+				0
+			)).to.be.ok
+		})
+
+		it('should revert when initialize method is from nonInitializer/constructor method',
+			async()=>{
+			const zeroAddress = "0x0000000000000000000000000000000000000000";
+			await expect(symmVesting.connect(admin).initialize(admin, admin,
+				zeroAddress, zeroAddress, zeroAddress, zeroAddress, zeroAddress, zeroAddress, zeroAddress))
+				.to.be.reverted
+			const adminAdress = await admin.getAddress()
+			await expect(symmVesting.connect(admin).__vesting_init(adminAdress, adminAdress, adminAdress))
+				.to.be.reverted
+		})
+
+		it('should fail when zero is passed as address to symmVesting initialize method', async()=>{
+			const VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
+			const vestingPlanOps = await VestingPlanOps.deploy()
+			await vestingPlanOps.waitForDeployment()
+
+			const zeroAddress = "0x0000000000000000000000000000000000000000";
+			const nonZeroAddress = "0x0000000000000000000000000000000000000001";
+
+			const VestingFactory = await ethers.getContractFactory("SymmVesting", {
+				libraries: {
+					VestingPlanOps: await vestingPlanOps.getAddress(),
+				},
+			})
+
+			await expect( upgrades.deployProxy(VestingFactory, [zeroAddress, nonZeroAddress,
+				nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, zeroAddress,
+				nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				zeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				nonZeroAddress, zeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				nonZeroAddress, nonZeroAddress, zeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				nonZeroAddress, nonZeroAddress, nonZeroAddress, zeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, zeroAddress, nonZeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, zeroAddress, nonZeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(VestingFactory, [nonZeroAddress, nonZeroAddress,
+				nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, nonZeroAddress, zeroAddress ], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "initialize",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+		})
+
+		it('should fail when zero is passed as address to vesting initialize method', async()=>{
+			const VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
+			const vestingPlanOps = await VestingPlanOps.deploy()
+			await vestingPlanOps.waitForDeployment()
+
+			const zeroAddress = "0x0000000000000000000000000000000000000000";
+			const nonZeroAddress = "0x0000000000000000000000000000000000000001";
+
+			const Vesting = await ethers.getContractFactory("SymmVesting", {
+				libraries: {
+					VestingPlanOps: await vestingPlanOps.getAddress(),
+				},
+			})
+			await expect( upgrades.deployProxy(Vesting, [zeroAddress, nonZeroAddress, nonZeroAddress], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "__vesting_init",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+
+			await expect( upgrades.deployProxy(Vesting, [nonZeroAddress, nonZeroAddress, zeroAddress], {
+				unsafeAllow: ["external-library-linking"],
+				initializer: "__vesting_init",
+			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+		})
+	})
+	describe('Role management', ()=>{
+		it('should allow calling methods just to the ones who have the required role', async()=>{
+			await expect(symmVesting.connect(user1).pause()).to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
+			await expect(symmVesting.connect(user1).unpause()).to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
+			await expect(symmVesting.connect(user1).resetVestingPlans(symmToken, [await user1.getAddress()], [e(1)]))
+				.to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
+			await expect(symmVesting.connect(user1).setupVestingPlans(
+				await symmToken.getAddress(),
+				Math.floor(Date.now() / 1000),
+				Math.floor(Date.now() / 1000)+3600,
+				[await user1.getAddress()],
+				[e(1)]
+			)).to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
+			await expect(symmVesting.connect(user1).claimUnlockedTokenFor(symmToken, user1))
+				.to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
+			await expect(symmVesting.connect(user1).claimLockedTokenFor(symmToken, user1, e(1)))
+				.to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
+			await expect(symmVesting.connect(user1).claimLockedTokenForByPercentage(symmToken, user1, e(0.5)))
+				.to.be.revertedWithCustomError(symmVesting, "AccessControlUnauthorizedAccount")
 		})
 	})
 }

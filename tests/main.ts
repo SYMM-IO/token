@@ -5,7 +5,7 @@ import { shouldBehaveLikeSymmVesting } from "./symmVesting.behavior"
 import { ShouldBehaveLikeVesting } from "./vesting.behavior"
 
 describe("Symmio Token", () => {
-	if (process.env.TEST_MODE === "static") {
+	// if (process.env.TEST_MODE === "static") {
 		describe("Static Tests", async function () {
 			describe("Symm token", async function () {
 				shouldBehaveLikeSymmioToken()
@@ -27,12 +27,12 @@ describe("Symmio Token", () => {
 				ShouldBehaveLikeVesting()
 			})
 		})
-	} else if (process.env.TEST_MODE === "dynamic") {
+	// } else if (process.env.TEST_MODE === "dynamic") {
 		// Dynamic tests
 		describe("Dynamic Tests", async function () {
 			describe("Symm Vesting", async function () {
 				shouldBehaveLikeSymmVesting()
 			})
 		})
-	}
+	// }
 })
