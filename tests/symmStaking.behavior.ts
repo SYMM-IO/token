@@ -223,16 +223,6 @@ export function shouldBehaveLikeSymmStaking() {
 			expect(user2ClaimedUSDC).to.equal(67n)
 		})
 
-		// it("should give no rewards if the user claims write after deposit", function(){
-		// 	let depositAmount = "100"
-		// 	await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount)
-		// 	const calls = [
-		// 		symmStaking.connect(user1).deposit(depositAmount, user1.address)
-		// 		symmStaking.connect(user1).claimRewards()
-		// 	]
-		//
-		// 	await symmStaking.connect(user1).multiCall
-		// })
 	})
 
 	describe("Config Reward", function () {
