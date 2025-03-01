@@ -1,8 +1,8 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
 import { Symmio } from "../typechain-types"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
 import { e } from "../utils"
+import { initializeFixture, RunContext } from "./Initialize.fixture"
 
 export function shouldBehaveLikeSymmioToken() {
 	let context: RunContext
@@ -60,10 +60,7 @@ export function shouldBehaveLikeSymmioToken() {
 		})
 
 		it("should revert when users try to burn more tokens than they have", async () => {
-			await expect(symmToken.connect(context.signers.user1).burn(e(1000))).to.be.revertedWithCustomError(
-				symmToken,
-				"ERC20InsufficientBalance",
-			)
+			await expect(symmToken.connect(context.signers.user1).burn(e(1000))).to.be.revertedWithCustomError(symmToken, "ERC20InsufficientBalance")
 		})
 	})
 

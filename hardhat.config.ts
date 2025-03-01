@@ -7,8 +7,10 @@ import "hardhat-gas-reporter"
 import { HardhatUserConfig } from "hardhat/config"
 import "solidity-coverage"
 
-import "./tasks/SymmAllocationClaimer"
+import "./tasks/symmAllocationClaimer"
 import "./tasks/symmioToken"
+import "./tasks/symmVesting"
+import "./tasks/symmStaking";
 
 dotenv.config()
 
@@ -42,18 +44,22 @@ export const config: HardhatUserConfig = {
 			},
 		},
 	},
+
 	networks: {
 		hardhat: {
-			// forking: {
-			// 	url: "",
-			// 	blockNumber: 67892234,
-			// },
+			forking: {
+				url: "",
+				blockNumber: 26800831,
+			},
 		},
 		ethereum: {
 			url: "https://ethereum.blockpi.network/v1/rpc/public",
 			accounts: accounts_list,
 		},
-
+		base: {
+			url: "https://mainnet.base.org",
+			accounts: accounts_list,
+		},
 		polygon: {
 			url: "https://rpc.ankr.com/polygon",
 			accounts: accounts_list,
@@ -62,6 +68,7 @@ export const config: HardhatUserConfig = {
 	etherscan: {
 		apiKey: {
 			polygon: "",
+			base: "",
 		},
 		customChains: [],
 	},
