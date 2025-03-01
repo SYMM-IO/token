@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity >=0.8.18;
 
+// Balancer v3 Router interface
 interface IRouter {
 	function addLiquidityProportional(
 		address pool,

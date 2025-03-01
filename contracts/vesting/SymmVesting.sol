@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity >=0.8.18;
 
 import "./Vesting.sol";
 import "./interfaces/IPermit2.sol";
 import "./interfaces/IMintableERC20.sol";
 import { IPool } from "./interfaces/IPool.sol";
 import { IRouter } from "./interfaces/IRouter.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title SymmVesting Contract
 /// @notice Extends Vesting to add liquidity functionality for SYMM and SYMM LP tokens.
@@ -103,6 +101,31 @@ contract SymmVesting is Vesting {
 		uint256 minLpAmount,
 		uint256 maxUsdcIn
 	) external whenNotPaused nonReentrant returns (uint256[] memory amountsIn, uint256 lpAmount) {
+		return _addLiquidityProcess(amount, minLpAmount, maxUsdcIn);
+	}
+
+	/// @notice Adds liquidity by converting a portion of SYMM vesting into SYMM LP tokens.
+	/// @dev Claims any unlocked tokens from SYMM and SYMM LP vesting plans.
+	///      Reverts if the SYMM vesting plan's locked amount is insufficient.
+	/// @param percentage The percentage of locked SYMM to use for adding liquidity.
+	/// @param minLpAmount The minimum acceptable LP token amount to receive (for slippage protection).
+	/// @param maxUsdcIn The maximum amount of USDC that can be used (for price protection).
+	/// @return amountsIn Array of token amounts used (SYMM and USDC).
+	/// @return lpAmount The amount of LP tokens minted.
+	function addLiquidityByPercentage(
+		uint256 percentage,
+		uint256 minLpAmount,
+		uint256 maxUsdcIn
+	) external whenNotPaused nonReentrant returns (uint256[] memory amountsIn, uint256 lpAmount) {
+		uint256 amount = (getLockedAmountsForToken(msg.sender, SYMM) * percentage) / 1e18;
+		return _addLiquidityProcess(amount, minLpAmount, maxUsdcIn);
+	}
+
+	function _addLiquidityProcess(
+		uint256 amount,
+		uint256 minLpAmount,
+		uint256 maxUsdcIn
+	) internal returns (uint256[] memory amountsIn, uint256 lpAmount) {
 		// Claim any unlocked SYMM tokens first.
 		_claimUnlockedToken(SYMM, msg.sender);
 
@@ -151,7 +174,7 @@ contract SymmVesting is Vesting {
 		// Check if usdcIn exceeds maxUsdcIn parameter
 		if (maxUsdcIn > 0 && usdcIn > maxUsdcIn) revert MaxUsdcExceeded();
 
-		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 95) / 100; // Default 5% slippage if not specified
+		uint256 minLpAmountWithSlippage = minLpAmount > 0 ? minLpAmount : (expectedLpAmount * 99) / 100; // Default 1% slippage if not specified
 
 		// Retrieve pool tokens. Assumes poolTokens[0] is SYMM and poolTokens[1] is USDC.
 		IERC20[] memory poolTokens = POOL.getTokens();
