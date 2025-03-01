@@ -76,17 +76,45 @@ export function shouldBehaveLikeSymmVesting() {
 			const lockedAmountBefore = await symmVesting.getLockedAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const claimableAmountBefore = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const unlockedAmountBefore = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
+			const planBefore = await symmVesting.vestingPlans(pool, await context.signers.user1.getAddress())
+			const quote = await symmVesting.getLiquidityQuote(symmAmount)
+			await expect(planBefore.amount).to.equal(0)
 
 			await symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)
 
 			const lockedAmountAfter = await symmVesting.getLockedAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const claimableAmountAfter = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
 			const unlockedAmountAfter = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
+			const planAfter = await symmVesting.vestingPlans(pool, await user1.getAddress())
 
-			expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15))
-			expect(claimableAmountBefore - claimableAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
-			expect(claimableAmountAfter).to.be.lessThan(1e5)
-			expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
+			await expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15))
+			await expect(claimableAmountBefore - claimableAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
+			await expect(claimableAmountAfter).to.be.lessThan(1e5)
+			await expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
+			await expect(unlockedAmountAfter).to.be.closeTo(0, BigInt(1e5))
+			await expect(planAfter.amount).to.be.closeTo(quote.lpAmount, BigInt(1e2))
+		})
+
+		it("should allow a user to add liquidity by percentage successfully", async () => {
+			const symmPercentage = e(0.5)
+			const symmAmount = await symmVesting.getLockedAmountsForToken(user1, symmToken)/BigInt(2);
+			const minLpAmount = e("0.05")
+
+			const lockedAmountBefore = await symmVesting.getLockedAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
+			const claimableAmountBefore = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
+			const unlockedAmountBefore = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
+
+			await symmVesting.connect(user1).addLiquidityByPercentage(symmPercentage, minLpAmount, user1UsdcAmount)
+
+			const lockedAmountAfter = await symmVesting.getLockedAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
+			const claimableAmountAfter = await symmVesting.getClaimableAmountsForToken(await user1.getAddress(), await symmToken.getAddress())
+			const unlockedAmountAfter = await symmVesting.getUnlockedAmountForToken(await user1.getAddress(), await symmToken.getAddress())
+
+			await expect(lockedAmountBefore - lockedAmountAfter).to.be.within(BigInt(symmAmount), BigInt(symmAmount) + BigInt(1e15))
+			await expect(claimableAmountBefore - claimableAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
+			await expect(claimableAmountAfter).to.be.lessThan(1e5)
+			await expect(unlockedAmountBefore - unlockedAmountAfter).to.be.within(BigInt(claimableAmountBefore), BigInt(claimableAmountBefore) + BigInt(1e5))
+			await expect(unlockedAmountAfter).to.be.closeTo(0, BigInt(1e5))
 		})
 
 		it("should revert if slippage limit is exceeded", async () => {
@@ -126,7 +154,7 @@ export function shouldBehaveLikeSymmVesting() {
 			await erc20.connect(user2).approve(await symmVesting.getAddress(), usdcAmount)
 
 			const diffBalance = symmAmount - symmVestingBalance
-			expect(diffBalance).to.be.greaterThan(0)
+			await expect(diffBalance).to.be.greaterThan(0)
 			await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcAmount)
 		})
 
@@ -226,20 +254,20 @@ export function shouldBehaveLikeSymmVesting() {
 						const lpOut = parsedLog.args[3]
 						sumUsdcDiff += Number(usdcIn) - Number(usdcAmount)
 						sumSymmDiff += Number(symmIn) - Number(symmAmount)
-						sumLPDiff += Number(lpOut) - Number(expectedLpAmount)
+						sumLPDiff += Number(lpOut) - Number(await expectedLpAmount)
 
-						expect(usdcAmount).to.be.closeTo(usdcIn, 5)
-						expect(symmAmount).to.be.closeTo(symmIn, 5)
-						expect(expectedLpAmount).to.be.closeTo(lpOut, 5)
+						await expect(usdcAmount).to.be.closeTo(usdcIn, 5)
+						await expect(symmAmount).to.be.closeTo(symmIn, 5)
+						await expect(await expectedLpAmount).to.be.closeTo(lpOut, 5)
 
-						expect(userUsdcBalanceBefore - userUsdcBalanceAfter).to.be.equal(Number(usdcIn))
+						await expect(userUsdcBalanceBefore - userUsdcBalanceAfter).to.be.equal(Number(usdcIn))
 					}
 				}
 			}
 
-			expect(sumUsdcDiff).to.be.closeTo(0, liquidityAdditionsCount)
-			expect(sumSymmDiff).to.be.closeTo(0, liquidityAdditionsCount)
-			expect(sumLPDiff).to.be.closeTo(0, liquidityAdditionsCount)
+			await expect(sumUsdcDiff).to.be.closeTo(0, liquidityAdditionsCount)
+			await expect(sumSymmDiff).to.be.closeTo(0, liquidityAdditionsCount)
+			await expect(sumLPDiff).to.be.closeTo(0, liquidityAdditionsCount)
 		}).timeout(500000)
 
 		it("should revert if the contract tries to transferFrom more than maxUsdc even when it's approved", async () => {
@@ -259,8 +287,8 @@ export function shouldBehaveLikeSymmVesting() {
 		const query1 = await symmVesting.getLiquidityQuote(e(100))
 		const lockedLPAfter1 = await symmVesting.getLockedAmountsForToken(user1, pool)
 		const unlockedSymmAfter1 = await symmVesting.getUnlockedAmountForToken(user1, symmToken)
-		expect(lockedLPAfter1-lockedLPBefore1).to.be.closeTo(query1[1], 1000)
-		expect(unlockedSymmBefore1-unlockedSymmAfter1).to.be.greaterThan(0)
+		await expect(lockedLPAfter1-lockedLPBefore1).to.be.closeTo(query1[1], 1000)
+		await expect(unlockedSymmBefore1-unlockedSymmAfter1).to.be.greaterThan(0)
 
 		const lockedLPBefore2 = await symmVesting.getLockedAmountsForToken(user1, pool)
 		const symmBalanceBefore2 = await symmToken.balanceOf(user1)
@@ -268,8 +296,8 @@ export function shouldBehaveLikeSymmVesting() {
 		await symmVesting.connect(user1).addLiquidity(e(1), 0, 0)
 		const symmBalanceAfter2 = await symmToken.balanceOf(user1)
 		const lockedLPAfter2 = await symmVesting.getLockedAmountsForToken(user1, pool)
-		expect(lockedLPAfter2 - lockedLPBefore2).to.be.closeTo(query2.lpAmount, String(2e+13)) //2e13: unlocked amount during passed time of several calls
-		expect(symmBalanceAfter2 - symmBalanceBefore2).to.be.greaterThan(0)
+		await expect(lockedLPAfter2 - lockedLPBefore2).to.be.closeTo(query2.lpAmount, String(2e+13)) //2e13: unlocked amount during passed time of several calls
+		await expect(symmBalanceAfter2 - symmBalanceBefore2).to.be.greaterThan(0)
 	})
 
 	it('should claim lp tokens after add liquidity by claimTokens' , async() => {
@@ -282,13 +310,13 @@ export function shouldBehaveLikeSymmVesting() {
 		await symmVesting.connect(user1).claimUnlockedToken(symmToken, user1)
 		const userSymmBalanceAfter = await symmToken.balanceOf(user1)
 		const unlockedSymmAfter = await symmVesting.getClaimableAmountsForToken(user1, symmToken)
-		expect(unlockedSymmAfter).to.be.lessThan(unlockedSymmBefore)
-		expect(userSymmBalanceAfter).to.be.greaterThan(userSymmBalanceBefore)
+		await expect(unlockedSymmAfter).to.be.lessThan(unlockedSymmBefore)
+		await expect(userSymmBalanceAfter).to.be.greaterThan(userSymmBalanceBefore)
 
 		const unlockedLPBefore = await symmVesting.getClaimableAmountsForToken(user1, pool)
 		await symmVesting.connect(user1).claimUnlockedToken(pool, user1)
 		const unlockedLPAfter = await symmVesting.getClaimableAmountsForToken(user1, pool)
-		expect(unlockedLPAfter).to.be.lessThan(unlockedLPBefore)
+		await expect(unlockedLPAfter).to.be.lessThan(unlockedLPBefore)
 	})
 	})
 }
