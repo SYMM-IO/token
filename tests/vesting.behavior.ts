@@ -32,7 +32,7 @@ export function ShouldBehaveLikeVesting() {
 				await symmVesting.OPERATOR_ROLE(),
 			]) {
 				const hasRole = await symmVesting.hasRole(role, context.signers.admin.address)
-				expect(hasRole).to.be.true
+				await expect (hasRole).to.be.true
 			}
 		})
 	})
@@ -64,17 +64,17 @@ export function ShouldBehaveLikeVesting() {
 			const amounts = ["1000"]
 			const oldTotalVesting = await symmVesting.totalVested(await context.symmioToken.getAddress())
 
-			expect(await symmVesting.setupVestingPlans(await context.symmioToken.getAddress(), "0", "0", users, amounts)).to.be.not.reverted
+			await expect (await symmVesting.setupVestingPlans(await context.symmioToken.getAddress(), "0", "0", users, amounts)).to.be.not.reverted
 
 			const plan = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
 			const newTotalVesting = await symmVesting.totalVested(await context.symmioToken.getAddress())
 
-			expect(newTotalVesting).to.be.equal(oldTotalVesting + "1000")
+			await expect (newTotalVesting).to.be.equal(oldTotalVesting + "1000")
 
-			expect(plan.startTime).to.be.equal("0")
-			expect(plan.endTime).to.be.equal("0")
-			expect(plan.amount).to.be.equal(amounts[0])
-			expect(plan.claimedAmount).to.be.equal(0)
+			await expect (plan.startTime).to.be.equal("0")
+			await expect (plan.endTime).to.be.equal("0")
+			await expect (plan.amount).to.be.equal(amounts[0])
+			await expect (plan.claimedAmount).to.be.equal(0)
 		})
 	})
 
@@ -105,7 +105,7 @@ export function ShouldBehaveLikeVesting() {
 
 			await network.provider.send("evm_mine")
 
-			expect(await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(0)
+			await expect (await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(0)
 		})
 
 		it("Should unlockedAmount be zero at the exact start time", async () => {
@@ -121,7 +121,7 @@ export function ShouldBehaveLikeVesting() {
 
 			await network.provider.send("evm_mine")
 
-			expect(await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(0)
+			await expect (await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(0)
 		})
 
 		it("Should unlockedAmount be partial during the vesting period", async () => {
@@ -133,7 +133,7 @@ export function ShouldBehaveLikeVesting() {
 
 			const expectedUnlocked = Math.floor(Number((BigInt(1000) * (BigInt(midTime) - plan.startTime)) / (plan.endTime - plan.startTime)))
 
-			expect(await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(expectedUnlocked)
+			await expect (await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(expectedUnlocked)
 		})
 
 		it("Should unlockedAmount be the full amount at the exact end time", async () => {
@@ -141,7 +141,7 @@ export function ShouldBehaveLikeVesting() {
 			await network.provider.send("evm_setNextBlockTimestamp", [Number(plan.endTime)])
 			await network.provider.send("evm_mine")
 
-			expect(await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(1000)
+			await expect (await symmVesting.getUnlockedAmountForToken(await context.signers.user1.getAddress(), context.symmioToken)).to.be.equal(1000)
 		})
 
 		it("Should claimUnlockedToken successfully", async () => {
@@ -154,7 +154,7 @@ export function ShouldBehaveLikeVesting() {
 			const oldContractBalance = await context.symmioToken.balanceOf(symmVesting)
 			const oldUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
 
-			expect(await symmVesting.connect(context.signers.user1).claimUnlockedToken(await context.symmioToken.getAddress())).to.be.not.reverted
+			await expect (await symmVesting.connect(context.signers.user1).claimUnlockedToken(await context.symmioToken.getAddress())).to.be.not.reverted
 			plan = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
 
 			const newTotalVested = await symmVesting.totalVested(context.symmioToken)
@@ -162,10 +162,10 @@ export function ShouldBehaveLikeVesting() {
 			const newContractBalance = await context.symmioToken.balanceOf(symmVesting)
 			const newUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
 
-			expect(newTotalVested).to.be.equal(oldTotalVested - BigInt(1000))
-			expect(newClaimedAmount).to.be.equal(oldClaimedAmount + BigInt(1000))
-			expect(newContractBalance).to.be.equal(oldContractBalance - BigInt(1000))
-			expect(newUserBalance).to.be.equal(oldUserBalance + BigInt(1000))
+			await expect (newTotalVested).to.be.equal(oldTotalVested - BigInt(1000))
+			await expect (newClaimedAmount).to.be.equal(oldClaimedAmount + BigInt(1000))
+			await expect (newContractBalance).to.be.equal(oldContractBalance - BigInt(1000))
+			await expect (newUserBalance).to.be.equal(oldUserBalance + BigInt(1000))
 		})
 	})
 
@@ -197,7 +197,7 @@ export function ShouldBehaveLikeVesting() {
 			await symmVesting.connect(context.signers.user1).claimLockedToken(context.symmioToken, 1000)
 
 			const newTotalVested = await symmVesting.totalVested(context.symmioToken)
-			expect(newTotalVested).to.be.equal(oldTotalVested - BigInt(1000))
+			await expect (newTotalVested).to.be.equal(oldTotalVested - BigInt(1000))
 		})
 
 		it("Should distribute claimed amount correctly", async () => {
@@ -209,15 +209,54 @@ export function ShouldBehaveLikeVesting() {
 			const newPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
 			const newUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
 
-			expect(newPenaltyContractBalance).to.be.equal(oldPenaltyContractBalance + BigInt(500))
-			expect(newUserBalance).to.be.equal(oldUserBalance + BigInt(500))
+			await expect (newPenaltyContractBalance).to.be.equal(oldPenaltyContractBalance + BigInt(500))
+			await expect (newUserBalance).to.be.equal(oldUserBalance + BigInt(500))
+		})
+
+		it("Should allow user to claim locked token by percentage", async () => {
+			const oldPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
+			const oldUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
+
+			await symmVesting.connect(context.signers.user1).claimLockedTokenByPercentage(context.symmioToken, e(0.5))
+
+			const newPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
+			const newUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
+
+			await expect (newPenaltyContractBalance).to.be.equal(oldPenaltyContractBalance + BigInt(250))
+			await expect (newUserBalance).to.be.equal(oldUserBalance + BigInt(250))
+		})
+
+		it("Should allow admin to claim locked token for user", async()=>{
+			const oldPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
+			const oldUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
+
+			await symmVesting.connect(admin).claimLockedTokenFor(symmToken, user1, 1000)
+
+			const newPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
+			const newUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
+
+			await expect (newPenaltyContractBalance).to.be.equal(oldPenaltyContractBalance + BigInt(500))
+			await expect (newUserBalance).to.be.equal(oldUserBalance + BigInt(500))
+		})
+
+		it("Should allow admin to claim locked token for user by percentage", async () => {
+			const oldPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
+			const oldUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
+
+			await symmVesting.connect(context.signers.admin).claimLockedTokenForByPercentage(context.symmioToken, user1, e(0.5))
+
+			const newPenaltyContractBalance = await context.symmioToken.balanceOf(await symmVesting.lockedClaimPenaltyReceiver())
+			const newUserBalance = await context.symmioToken.balanceOf(context.signers.user1)
+
+			await expect (newPenaltyContractBalance).to.be.equal(oldPenaltyContractBalance + BigInt(250))
+			await expect (newUserBalance).to.be.equal(oldUserBalance + BigInt(250))
 		})
 
 		it("Should reset claimed amount to zero after claiming", async () => {
 			await symmVesting.connect(context.signers.user1).claimLockedToken(context.symmioToken, 1000)
 
 			const plan = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
-			expect(plan.claimedAmount).to.be.equal(0)
+			await expect (plan.claimedAmount).to.be.equal(0)
 		})
 
 		it("Should update vesting startTime and endTime after claiming", async () => {
@@ -234,8 +273,8 @@ export function ShouldBehaveLikeVesting() {
 
 			const expectedNewEndTime = actualNewStartTime + remainingDuration
 
-			expect(planAfter.startTime).to.equal(actualNewStartTime)
-			expect(planAfter.endTime).to.equal(expectedNewEndTime)
+			await expect (planAfter.startTime).to.equal(actualNewStartTime)
+			await expect (planAfter.endTime).to.equal(expectedNewEndTime)
 		})
 	})
 
@@ -269,9 +308,9 @@ export function ShouldBehaveLikeVesting() {
 			const planAfter = await symmVesting.vestingPlans(token, user)
 			const totalVestedAfter = await symmVesting.totalVested(token)
 
-			expect(planAfter.amount).to.equal(newAmount)
-			expect(planAfter.claimedAmount).to.equal(0)
-			expect(totalVestedAfter).to.equal(totalVestedBefore - planBefore.amount + newAmount)
+			await expect (planAfter.amount).to.equal(newAmount)
+			await expect (planAfter.claimedAmount).to.equal(0)
+			await expect (totalVestedAfter).to.equal(totalVestedBefore - planBefore.amount + newAmount)
 		})
 
 		it("Should fail if users and amounts arrays have different lengths", async () => {
@@ -309,7 +348,7 @@ export function ShouldBehaveLikeVesting() {
 			await expect(symmVesting.connect(context.signers.admin).resetVestingPlans(token, [user], [newAmount])).to.not.be.reverted
 
 			const planAfter = await symmVesting.vestingPlans(token, user)
-			expect(planAfter.claimedAmount).to.equal(0)
+			await expect (planAfter.claimedAmount).to.equal(0)
 		})
 	})
 
