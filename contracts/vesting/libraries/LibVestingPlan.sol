@@ -12,7 +12,7 @@ library VestingPlanOps {
 	error AlreadySetup();
 	error ShouldClaimFirst();
 	error ShouldSetupFirst();
-	error PlanIsFinsihed();
+	error PlanIsFinished();
 
 	/// @notice Calculates the unlocked amount for a vesting plan.
 	/// @param self The vesting plan.
@@ -73,7 +73,7 @@ library VestingPlanOps {
 		if (!isSetup(self)) revert ShouldSetupFirst();
 		// Rebase the vesting plan from now.
 		uint256 remaining = remainingDuration(self);
-		if (remaining == 0) revert PlanIsFinsihed();
+		if (remaining == 0) revert PlanIsFinished();
 		self.startTime = block.timestamp;
 		self.endTime = block.timestamp + remaining;
 		self.amount = amount;
