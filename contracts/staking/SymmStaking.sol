@@ -24,6 +24,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
 
 	bytes32 public constant REWARD_MANAGER_ROLE = keccak256("REWARD_MANAGER_ROLE");
+	bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
 	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
@@ -50,7 +51,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	error ArraysMismatched();
 
 	/// @notice Thrown when there is an already ongoing reward period for this token.
-	//TODO: params
 	error OngoingRewardPeriodForToken(address token, uint256 pendingRewards);
 
 	/// @notice Thrown when the whitelist status is already set.
@@ -66,8 +66,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @notice Emitted when rewards are added.
 	 * @param rewardsTokens Array of reward token addresses.
 	 * @param rewards Array of reward amounts.
+	 * @param newRates Array of new rates.
 	 */
-	event RewardNotified(address[] rewardsTokens, uint256[] rewards);
+	event RewardNotified(address[] rewardsTokens, uint256[] rewards, uint256[] newRates);
 
 	/**
 	 * @notice Emitted when a deposit is made.
@@ -272,11 +273,17 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param tokens Array of reward token addresses.
 	 * @param amounts Array of reward amounts corresponding to each token.
 	 */
-	function notifyRewardAmount(address[] calldata tokens, uint256[] calldata amounts) external nonReentrant whenNotPaused {
+	function notifyRewardAmount(
+		address[] calldata tokens,
+		uint256[] calldata amounts
+	) external nonReentrant whenNotPaused onlyRole(REWARD_NOTIFIER_ROLE) {
 		_updateRewardsStates(address(0));
 		if (tokens.length != amounts.length) revert ArraysMismatched();
 
 		uint256 len = tokens.length;
+
+		uint256[] memory newRates = new uint256[](len);
+
 		for (uint256 i = 0; i < len; i++) {
 			address token = tokens[i];
 			uint256 amount = amounts[i];
@@ -287,8 +294,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 			pendingRewards[token] += amount;
 			_addRewardsForToken(token, amount);
+			newRates[i] = _addRewardsForToken(token, amount);
 		}
-		emit RewardNotified(tokens, amounts);
+		emit RewardNotified(tokens, amounts, newRates);
 	}
 
 	//--------------------------------------------------------------------------
@@ -363,7 +371,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	// Internal Functions
 	//--------------------------------------------------------------------------
 
-	function _addRewardsForToken(address token, uint256 amount) internal {
+	function _addRewardsForToken(address token, uint256 amount) internal returns (uint256) {
 		TokenRewardState storage state = rewardState[token];
 
 		if (block.timestamp >= state.periodFinish) {
@@ -376,6 +384,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 
 		state.lastUpdated = block.timestamp;
 		state.periodFinish = block.timestamp + state.duration;
+		return state.rate;
 	}
 
 	/**
