@@ -8,6 +8,7 @@ import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title SymmStaking
@@ -22,6 +23,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	//--------------------------------------------------------------------------
 
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
+	uint256 public constant STANDARD_DECIMALS = 18;
 
 	bytes32 public constant REWARD_MANAGER_ROLE = keccak256("REWARD_MANAGER_ROLE");
 	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -57,6 +59,12 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	/// @param token The token address.
 	/// @param currentStatus The current whitelist status.
 	error TokenWhitelistStatusUnchanged(address token, bool currentStatus);
+
+	/// @notice Thrown when the token decimals are invalid.
+	error InvalidTokenDecimals(address token, uint8 decimals);
+
+	/// @notice Thrown when failed to read token decimals.
+	error FailedToReadDecimals(address token);
 
 	//--------------------------------------------------------------------------
 	// Events
@@ -133,6 +141,8 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	address[] public rewardTokens;
 	// Mapping to track if a token is whitelisted for rewards.
 	mapping(address => bool) public isRewardToken;
+	// Mapping to track token decimals
+	mapping(address => uint8) public tokenDecimals;
 
 	// Mapping from user => reward token => user paid reward per token.
 	mapping(address => mapping(address => uint256)) public userRewardPerTokenPaid;
@@ -187,6 +197,21 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	}
 
 	/**
+	 * @notice Calculate the scaling factor for a token based on its decimals
+	 * @param _token The token address
+	 * @return The scaling factor to use for this token
+	 */
+	function getScalingFactor(address _token) public view returns (uint256) {
+		uint8 decimals = tokenDecimals[_token];
+		// Default to 18 decimals (no scaling) if decimals not set
+		if (decimals == 0) return 1;
+		// Only apply scaling if decimals are less than 18
+		if (decimals >= STANDARD_DECIMALS) return 1;
+		// Calculate dynamic scaling factor: 10^(18 - token_decimals)
+		return 10 ** (STANDARD_DECIMALS - decimals);
+	}
+
+	/**
 	 * @notice Calculates the reward per token for a given reward token.
 	 * @param _rewardsToken The reward token address.
 	 * @return The reward per token.
@@ -195,10 +220,15 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (totalSupply == 0) {
 			return rewardState[_rewardsToken].perTokenStored;
 		}
+
+		uint256 scalingFactor = getScalingFactor(_rewardsToken);
+
 		return
 			rewardState[_rewardsToken].perTokenStored +
-			(((lastTimeRewardApplicable(_rewardsToken) - rewardState[_rewardsToken].lastUpdated) * rewardState[_rewardsToken].rate * 1e18) /
-				totalSupply);
+			(((lastTimeRewardApplicable(_rewardsToken) - rewardState[_rewardsToken].lastUpdated) *
+				rewardState[_rewardsToken].rate *
+				1e18 *
+				scalingFactor) / totalSupply);
 	}
 
 	/**
@@ -329,6 +359,15 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		} else {
 			rewardTokens.push(token);
 			rewardState[token].duration = DEFAULT_REWARDS_DURATION;
+
+			// Read and set token decimals
+			try IERC20Metadata(token).decimals() returns (uint8 decimals) {
+				if (decimals == 0) revert InvalidTokenDecimals(token, decimals);
+				tokenDecimals[token] = decimals;
+			} catch {
+				// Revert if the decimals function call fails
+				revert FailedToReadDecimals(token);
+			}
 		}
 
 		emit UpdateWhitelist(token, status);
@@ -390,6 +429,14 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			if (reward > 0) {
 				rewards[user][token] = 0;
 				pendingRewards[token] -= reward;
+
+				// Apply reverse scaling for tokens with non-standard decimals
+				uint256 scalingFactor = getScalingFactor(token);
+				if (scalingFactor > 1) {
+					// Divide by scaling factor to get the actual amount to transfer
+					reward = reward / scalingFactor;
+				}
+
 				IERC20(token).safeTransfer(user, reward);
 				emit RewardClaimed(user, token, reward);
 			}
