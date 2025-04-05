@@ -427,16 +427,15 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			address token = rewardTokens[i];
 			uint256 reward = rewards[user][token];
 			if (reward > 0) {
-				rewards[user][token] = 0;
-				pendingRewards[token] -= reward;
-
 				// Apply reverse scaling for tokens with non-standard decimals
 				uint256 scalingFactor = getScalingFactor(token);
 				if (scalingFactor > 1) {
 					// Divide by scaling factor to get the actual amount to transfer
 					reward = reward / scalingFactor;
 				}
-
+				rewards[user][token] = 0;
+				pendingRewards[token] -= reward;
+				
 				IERC20(token).safeTransfer(user, reward);
 				emit RewardClaimed(user, token, reward);
 			}
