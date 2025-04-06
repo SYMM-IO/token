@@ -326,6 +326,12 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 					break;
 				}
 			}
+			// All rewards are already paid to users so we can reset the state
+			rewardState[token].perTokenStored = 0; 
+			rewardState[token].rate = 0;
+			rewardState[token].duration = 0;
+			rewardState[token].periodFinish = 0;
+			rewardState[token].lastUpdated = block.timestamp;
 		} else {
 			rewardTokens.push(token);
 			rewardState[token].duration = DEFAULT_REWARDS_DURATION;
