@@ -19,7 +19,6 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	//--------------------------------------------------------------------------
 
 	error MismatchArrays();
-	error AlreadyClaimedMoreThanThis();
 	error InvalidAmount();
 	error ZeroAddress();
 
@@ -73,7 +72,7 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	/// @param admin Address to receive the admin and role assignments.
 	/// @param _lockedClaimPenalty Penalty rate (scaled by 1e18) for locked token claims.
 	/// @param _lockedClaimPenaltyReceiver Address that receives the penalty.
-	function __vesting_init(address admin, uint256 _lockedClaimPenalty, address _lockedClaimPenaltyReceiver) public initializer {
+	function __vesting_init(address admin, uint256 _lockedClaimPenalty, address _lockedClaimPenaltyReceiver) public onlyInitializing {
 		__AccessControlEnumerable_init();
 		__Pausable_init();
 		__ReentrancyGuard_init();
@@ -228,7 +227,6 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 			// Claim any unlocked tokens before resetting.
 			_claimUnlockedToken(token, user);
 			VestingPlan storage vestingPlan = vestingPlans[token][user];
-			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
 			uint256 oldTotal = vestingPlan.lockedAmount();
 			vestingPlan.resetAmount(amount);
 			totalVested[token] = totalVested[token] - oldTotal + amount;

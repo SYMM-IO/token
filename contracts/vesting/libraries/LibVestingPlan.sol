@@ -44,6 +44,7 @@ library VestingPlanOps {
 	/// @param self The vesting plan.
 	/// @return The number of seconds remaining.
 	function remainingDuration(VestingPlan storage self) public view returns (uint256) {
+		if (block.timestamp <= self.startTime) return self.endTime - self.startTime;
 		return self.endTime > block.timestamp ? self.endTime - block.timestamp : 0;
 	}
 
@@ -74,8 +75,9 @@ library VestingPlanOps {
 		// Rebase the vesting plan from now.
 		uint256 remaining = remainingDuration(self);
 		if (remaining == 0) revert PlanIsFinished();
-		self.startTime = block.timestamp;
-		self.endTime = block.timestamp + remaining;
+		uint256 startTime = self.startTime > block.timestamp ? self.startTime : block.timestamp;
+		self.startTime = startTime;
+		self.endTime = startTime + remaining;
 		self.amount = amount;
 		self.claimedAmount = 0;
 		return self;

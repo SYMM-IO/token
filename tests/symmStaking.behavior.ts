@@ -34,11 +34,11 @@ export function shouldBehaveLikeSymmStaking() {
 		const ERC20 = await ethers.getContractFactory("MockERC20")
 
 		// USDT Token
-		usdtToken = await ERC20.connect(admin).deploy("USDT", "USDT")
+		usdtToken = await ERC20.connect(admin).deploy("USDT", "USDT", 18)
 		await usdtToken.waitForDeployment()
 
 		// USDC Token
-		usdcToken = await ERC20.deploy("USDC", "USDC")
+		usdcToken = await ERC20.deploy("USDC", "USDC", 18) //TODO: is it ok that it's not 6?
 		await usdcToken.waitForDeployment()
 	})
 
@@ -221,6 +221,73 @@ export function shouldBehaveLikeSymmStaking() {
 			expect(user1ClaimedUSDC + user2ClaimedUSDC).to.equal(200n)
 			expect(user1ClaimedUSDC).to.equal(133n)
 			expect(user2ClaimedUSDC).to.equal(67n)
+		})
+
+		it("should correctly update perTokenStored for tokens with different decimals", async () => {
+			const context = await initializeFixture()
+			const { admin, user1 } = context.signers
+
+			// Deploy three mock reward tokens with different decimals
+			const MockERC20 = await ethers.getContractFactory("MockERC20")
+			const reward18 = await MockERC20.deploy("RewardToken18", "RT18", 18)
+			const reward6 = await MockERC20.deploy("RewardToken6", "RT6", 6)
+			// const reward4 = await MockERC20.deploy("RewardToken2", "RT2", 4)
+
+			// Add them as reward tokens
+			await context.symmStaking.connect(admin).configureRewardToken(reward18 ,true)
+			await context.symmStaking.connect(admin).configureRewardToken(reward6 ,true)
+			// await context.symmStaking.connect(admin).configureRewardToken(reward4 ,true)
+
+			// Amount to notify for each token
+			const amount18 = BigInt(1209.6e18) //2000 * 604800(1week) * 1e18
+			const amount6 = BigInt(1209.6e6)
+			// const amount4 = BigInt(1209.6e4)
+
+			// Mint reward tokens to admin
+			await reward18.mint(admin, amount18)
+			await reward6.mint(admin, amount6)
+			// await reward4.mint(admin, amount4)
+
+			// Approve staking contract to spend rewards
+			await reward18.connect(admin).approve(context.symmStaking, amount18)
+			await reward6.connect(admin).approve(context.symmStaking, amount6)
+			// await reward4.connect(admin).approve(context.symmStaking, amount4)
+
+			// Notify staking contract about the reward amounts
+			await context.symmStaking.connect(admin).notifyRewardAmount(
+				[reward18, reward6],
+				[amount18, amount6]
+			)
+
+			// User1 stakes a large amount of SYMM
+			await context.symmioToken.mint(user1.address, (BigInt(10_000_000e18)))
+			await context.symmioToken.connect(user1).approve(context.symmStaking, (BigInt(10_000_000e18)))
+			await context.symmStaking.connect(user1).deposit(BigInt(1_000_000e18), user1) //so we get reward rate of 2000
+
+			// One block later:
+			await context.symmStaking.connect(user1).deposit(1, user1)
+			let reward18State = await context.symmStaking.rewardState(reward18)
+			let reward6State = await context.symmStaking.rewardState(reward6)
+			// let reward4State = await context.symmStaking.rewardState(reward4)
+			let perTokenStored18_1 = reward18State.perTokenStored
+			let perTokenStored6_1 = reward6State.perTokenStored
+			// let perTokenStored4_1 = reward4State.perTokenStored
+			// expect(perTokenStored6).to.be.equal(2000e6)
+			expect(perTokenStored18_1).to.be.equal(2e9)
+			expect(perTokenStored6_1).to.be.equal(2e9)
+			// expect(perTokenStored4_1).to.be.equal(2e9)
+
+			// One block later:
+			await context.symmStaking.connect(user1).withdraw(1, user1)
+			reward18State = await context.symmStaking.rewardState(reward18)
+			reward6State = await context.symmStaking.rewardState(reward6)
+			// reward4State = await context.symmStaking.rewardState(reward4)
+			let perTokenStored18_2 = reward18State.perTokenStored
+			let perTokenStored6_2 = reward6State.perTokenStored
+			// let perTokenStored4_2 = reward4State.perTokenStored
+			expect(perTokenStored18_2-perTokenStored18_1).to.be.equal(2e9)
+			expect(perTokenStored6_2-perTokenStored6_1).to.be.equal(2e9)
+			// expect(perTokenStored4_2-perTokenStored4_1).to.be.equal(2e9)
 		})
 
 	})

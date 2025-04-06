@@ -8,6 +8,7 @@ import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/
 import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title SymmStaking
@@ -22,8 +23,10 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	//--------------------------------------------------------------------------
 
 	uint256 public constant DEFAULT_REWARDS_DURATION = 1 weeks;
+	uint256 public constant STANDARD_DECIMALS = 18;
 
 	bytes32 public constant REWARD_MANAGER_ROLE = keccak256("REWARD_MANAGER_ROLE");
+	bytes32 public constant REWARD_NOTIFIER_ROLE = keccak256("REWARD_NOTIFIER_ROLE");
 	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
@@ -50,13 +53,18 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	error ArraysMismatched();
 
 	/// @notice Thrown when there is an already ongoing reward period for this token.
-	//TODO: params
 	error OngoingRewardPeriodForToken(address token, uint256 pendingRewards);
 
 	/// @notice Thrown when the whitelist status is already set.
 	/// @param token The token address.
 	/// @param currentStatus The current whitelist status.
 	error TokenWhitelistStatusUnchanged(address token, bool currentStatus);
+
+	/// @notice Thrown when the token decimals are invalid.
+	error InvalidTokenDecimals(address token, uint8 decimals);
+
+	/// @notice Thrown when failed to read token decimals.
+	error FailedToReadDecimals(address token);
 
 	//--------------------------------------------------------------------------
 	// Events
@@ -66,8 +74,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @notice Emitted when rewards are added.
 	 * @param rewardsTokens Array of reward token addresses.
 	 * @param rewards Array of reward amounts.
+	 * @param newRates Array of new rates.
 	 */
-	event RewardNotified(address[] rewardsTokens, uint256[] rewards);
+	event RewardNotified(address[] rewardsTokens, uint256[] rewards, uint256[] newRates);
 
 	/**
 	 * @notice Emitted when a deposit is made.
@@ -133,6 +142,8 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	address[] public rewardTokens;
 	// Mapping to track if a token is whitelisted for rewards.
 	mapping(address => bool) public isRewardToken;
+	// Mapping to track token decimals
+	mapping(address => uint8) public tokenDecimals;
 
 	// Mapping from user => reward token => user paid reward per token.
 	mapping(address => mapping(address => uint256)) public userRewardPerTokenPaid;
@@ -187,6 +198,21 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	}
 
 	/**
+	 * @notice Calculate the scaling factor for a token based on its decimals
+	 * @param _token The token address
+	 * @return The scaling factor to use for this token
+	 */
+	function getScalingFactor(address _token) public view returns (uint256) {
+		uint8 decimals = tokenDecimals[_token];
+		// Default to 18 decimals (no scaling) if decimals not set
+		if (decimals == 0) return 1;
+		// Only apply scaling if decimals are less than 18
+		if (decimals >= STANDARD_DECIMALS) return 1;
+		// Calculate dynamic scaling factor: 10^(18 - token_decimals)
+		return 10 ** (STANDARD_DECIMALS - decimals);
+	}
+
+	/**
 	 * @notice Calculates the reward per token for a given reward token.
 	 * @param _rewardsToken The reward token address.
 	 * @return The reward per token.
@@ -195,10 +221,15 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		if (totalSupply == 0) {
 			return rewardState[_rewardsToken].perTokenStored;
 		}
+
+		uint256 scalingFactor = getScalingFactor(_rewardsToken);
+
 		return
 			rewardState[_rewardsToken].perTokenStored +
-			(((lastTimeRewardApplicable(_rewardsToken) - rewardState[_rewardsToken].lastUpdated) * rewardState[_rewardsToken].rate * 1e18) /
-				totalSupply);
+			(((lastTimeRewardApplicable(_rewardsToken) - rewardState[_rewardsToken].lastUpdated) *
+				rewardState[_rewardsToken].rate *
+				1e18 *
+				scalingFactor) / totalSupply);
 	}
 
 	/**
@@ -272,11 +303,17 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @param tokens Array of reward token addresses.
 	 * @param amounts Array of reward amounts corresponding to each token.
 	 */
-	function notifyRewardAmount(address[] calldata tokens, uint256[] calldata amounts) external nonReentrant whenNotPaused {
+	function notifyRewardAmount(
+		address[] calldata tokens,
+		uint256[] calldata amounts
+	) external nonReentrant whenNotPaused onlyRole(REWARD_NOTIFIER_ROLE) {
 		_updateRewardsStates(address(0));
 		if (tokens.length != amounts.length) revert ArraysMismatched();
 
 		uint256 len = tokens.length;
+
+		uint256[] memory newRates = new uint256[](len);
+
 		for (uint256 i = 0; i < len; i++) {
 			address token = tokens[i];
 			uint256 amount = amounts[i];
@@ -287,8 +324,9 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 			pendingRewards[token] += amount;
 			_addRewardsForToken(token, amount);
+			newRates[i] = _addRewardsForToken(token, amount);
 		}
-		emit RewardNotified(tokens, amounts);
+		emit RewardNotified(tokens, amounts, newRates);
 	}
 
 	//--------------------------------------------------------------------------
@@ -326,9 +364,24 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 					break;
 				}
 			}
+			// All rewards are already paid to users so we can reset the state
+			rewardState[token].perTokenStored = 0; 
+			rewardState[token].rate = 0;
+			rewardState[token].duration = 0;
+			rewardState[token].periodFinish = 0;
+			rewardState[token].lastUpdated = block.timestamp;
 		} else {
 			rewardTokens.push(token);
 			rewardState[token].duration = DEFAULT_REWARDS_DURATION;
+
+			// Read and set token decimals
+			try IERC20Metadata(token).decimals() returns (uint8 decimals) {
+				if (decimals == 0) revert InvalidTokenDecimals(token, decimals);
+				tokenDecimals[token] = decimals;
+			} catch {
+				// Revert if the decimals function call fails
+				revert FailedToReadDecimals(token);
+			}
 		}
 
 		emit UpdateWhitelist(token, status);
@@ -363,7 +416,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	// Internal Functions
 	//--------------------------------------------------------------------------
 
-	function _addRewardsForToken(address token, uint256 amount) internal {
+	function _addRewardsForToken(address token, uint256 amount) internal returns (uint256) {
 		TokenRewardState storage state = rewardState[token];
 
 		if (block.timestamp >= state.periodFinish) {
@@ -376,6 +429,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 
 		state.lastUpdated = block.timestamp;
 		state.periodFinish = block.timestamp + state.duration;
+		return state.rate;
 	}
 
 	/**
@@ -388,8 +442,15 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			address token = rewardTokens[i];
 			uint256 reward = rewards[user][token];
 			if (reward > 0) {
+				// Apply reverse scaling for tokens with non-standard decimals
+				uint256 scalingFactor = getScalingFactor(token);
+				if (scalingFactor > 1) {
+					// Divide by scaling factor to get the actual amount to transfer
+					reward = reward / scalingFactor;
+				}
 				rewards[user][token] = 0;
 				pendingRewards[token] -= reward;
+				
 				IERC20(token).safeTransfer(user, reward);
 				emit RewardClaimed(user, token, reward);
 			}
