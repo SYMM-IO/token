@@ -19,7 +19,6 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 	//--------------------------------------------------------------------------
 
 	error MismatchArrays();
-	error AlreadyClaimedMoreThanThis();
 	error InvalidAmount();
 	error ZeroAddress();
 
@@ -228,7 +227,6 @@ contract Vesting is Initializable, AccessControlEnumerableUpgradeable, PausableU
 			// Claim any unlocked tokens before resetting.
 			_claimUnlockedToken(token, user);
 			VestingPlan storage vestingPlan = vestingPlans[token][user];
-			if (amount < vestingPlan.unlockedAmount()) revert AlreadyClaimedMoreThanThis();
 			uint256 oldTotal = vestingPlan.lockedAmount();
 			vestingPlan.resetAmount(amount);
 			totalVested[token] = totalVested[token] - oldTotal + amount;
