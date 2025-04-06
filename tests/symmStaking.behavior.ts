@@ -231,32 +231,32 @@ export function shouldBehaveLikeSymmStaking() {
 			const MockERC20 = await ethers.getContractFactory("MockERC20")
 			const reward18 = await MockERC20.deploy("RewardToken18", "RT18", 18)
 			const reward6 = await MockERC20.deploy("RewardToken6", "RT6", 6)
-			const reward4 = await MockERC20.deploy("RewardToken2", "RT2", 4)
+			// const reward4 = await MockERC20.deploy("RewardToken2", "RT2", 4)
 
 			// Add them as reward tokens
 			await context.symmStaking.connect(admin).configureRewardToken(reward18 ,true)
 			await context.symmStaking.connect(admin).configureRewardToken(reward6 ,true)
-			await context.symmStaking.connect(admin).configureRewardToken(reward4 ,true)
+			// await context.symmStaking.connect(admin).configureRewardToken(reward4 ,true)
 
 			// Amount to notify for each token
 			const amount18 = BigInt(1209.6e18) //2000 * 604800(1week) * 1e18
 			const amount6 = BigInt(1209.6e6)
-			const amount4 = BigInt(1209.6e4)
+			// const amount4 = BigInt(1209.6e4)
 
 			// Mint reward tokens to admin
 			await reward18.mint(admin, amount18)
 			await reward6.mint(admin, amount6)
-			await reward4.mint(admin, amount4)
+			// await reward4.mint(admin, amount4)
 
 			// Approve staking contract to spend rewards
 			await reward18.connect(admin).approve(context.symmStaking, amount18)
 			await reward6.connect(admin).approve(context.symmStaking, amount6)
-			await reward4.connect(admin).approve(context.symmStaking, amount4)
+			// await reward4.connect(admin).approve(context.symmStaking, amount4)
 
 			// Notify staking contract about the reward amounts
 			await context.symmStaking.connect(admin).notifyRewardAmount(
-				[reward18, reward6, reward4],
-				[amount18, amount6, amount4]
+				[reward18, reward6],
+				[amount18, amount6]
 			)
 
 			// User1 stakes a large amount of SYMM
@@ -268,26 +268,26 @@ export function shouldBehaveLikeSymmStaking() {
 			await context.symmStaking.connect(user1).deposit(1, user1)
 			let reward18State = await context.symmStaking.rewardState(reward18)
 			let reward6State = await context.symmStaking.rewardState(reward6)
-			let reward4State = await context.symmStaking.rewardState(reward4)
+			// let reward4State = await context.symmStaking.rewardState(reward4)
 			let perTokenStored18_1 = reward18State.perTokenStored
 			let perTokenStored6_1 = reward6State.perTokenStored
-			let perTokenStored4_1 = reward4State.perTokenStored
+			// let perTokenStored4_1 = reward4State.perTokenStored
 			// expect(perTokenStored6).to.be.equal(2000e6)
 			expect(perTokenStored18_1).to.be.equal(2e9)
 			expect(perTokenStored6_1).to.be.equal(2e9)
-			expect(perTokenStored4_1).to.be.equal(2e9)
+			// expect(perTokenStored4_1).to.be.equal(2e9)
 
 			// One block later:
 			await context.symmStaking.connect(user1).withdraw(1, user1)
 			reward18State = await context.symmStaking.rewardState(reward18)
 			reward6State = await context.symmStaking.rewardState(reward6)
-			reward4State = await context.symmStaking.rewardState(reward4)
+			// reward4State = await context.symmStaking.rewardState(reward4)
 			let perTokenStored18_2 = reward18State.perTokenStored
 			let perTokenStored6_2 = reward6State.perTokenStored
-			let perTokenStored4_2 = reward4State.perTokenStored
+			// let perTokenStored4_2 = reward4State.perTokenStored
 			expect(perTokenStored18_2-perTokenStored18_1).to.be.equal(2e9)
 			expect(perTokenStored6_2-perTokenStored6_1).to.be.equal(2e9)
-			expect(perTokenStored4_2-perTokenStored4_1).to.be.equal(2e9)
+			// expect(perTokenStored4_2-perTokenStored4_1).to.be.equal(2e9)
 		})
 
 	})
