@@ -254,15 +254,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 * @return reward The amount of unclaimed rewards.
 	 */
 	function userRewards(address user, address token) external view returns (uint256 reward) {
-		reward = rewards[user][token];
-		if (reward > 0) {
-			// Apply reverse scaling for tokens with non-standard decimals
-			uint256 scalingFactor = getScalingFactor(token);
-			if (scalingFactor > 1) {
-				// Divide by scaling factor to get the actual amount to transfer
-				reward = reward / scalingFactor;
-			}
-		}
+		reward = rewards[user][token] / getScalingFactor(token);
 	}
 
 	/**
