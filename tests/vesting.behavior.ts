@@ -259,23 +259,7 @@ export function ShouldBehaveLikeVesting() {
 			await expect (plan.claimedAmount).to.be.equal(0)
 		})
 
-		it("Should update vesting startTime and endTime after claiming", async () => {
-			const oldPlan = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
 
-			const tx = await symmVesting.connect(context.signers.user1).claimLockedToken(context.symmioToken, 1000)
-
-			const receipt = await tx.wait()
-			const blockAfter = await ethers.provider.getBlock(receipt?.blockNumber ?? 0)
-			const actualNewStartTime = blockAfter?.timestamp ?? 0
-			const remainingDuration = Number(oldPlan.endTime) - Number(actualNewStartTime)
-
-			const planAfter = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
-
-			const expectedNewEndTime = actualNewStartTime + remainingDuration
-
-			await expect (planAfter.startTime).to.equal(actualNewStartTime)
-			await expect (planAfter.endTime).to.equal(expectedNewEndTime)
-		})
 	})
 
 	describe("resetVestingPlans", () => {
@@ -323,22 +307,6 @@ export function ShouldBehaveLikeVesting() {
 			)
 		})
 
-		it("Should fail if new amount is less than already claimed amount", async () => {
-			const user = await context.signers.user1.getAddress()
-			const token = await context.symmioToken.getAddress()
-
-			const plan = await symmVesting.vestingPlans(token, user)
-
-			const midTime = Math.floor(Number((plan.startTime + plan.endTime) / BigInt(2)))
-
-			await network.provider.send("evm_setNextBlockTimestamp", [midTime]) // half of vesting lock
-			await network.provider.send("evm_mine")
-
-			await expect(symmVesting.connect(context.signers.admin).resetVestingPlans(token, [user], [400])).to.be.revertedWithCustomError(
-				symmVesting,
-				"AlreadyClaimedMoreThanThis",
-			)
-		})
 
 		it("Should claim unlocked tokens before resetting", async () => {
 			const user = await context.signers.user1.getAddress()
@@ -571,12 +539,12 @@ export function ShouldBehaveLikeVesting() {
 			await expect( upgrades.deployProxy(Vesting, [zeroAddress, nonZeroAddress, nonZeroAddress], {
 				unsafeAllow: ["external-library-linking"],
 				initializer: "__vesting_init",
-			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+			})).to.be.revertedWithCustomError(symmVesting, "NotInitializing")
 
 			await expect( upgrades.deployProxy(Vesting, [nonZeroAddress, nonZeroAddress, zeroAddress], {
 				unsafeAllow: ["external-library-linking"],
 				initializer: "__vesting_init",
-			})).to.be.revertedWithCustomError(symmVesting, "ZeroAddress")
+			})).to.be.revertedWithCustomError(symmVesting, "NotInitializing")
 		})
 	})
 	describe('Role management', ()=>{

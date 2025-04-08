@@ -99,7 +99,7 @@ export function shouldBehaveLikeSymmStaking() {
 			const depositAmount = "604800"
 			const rewardAmount = depositAmount
 			await stakingToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await stakingToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await stakingToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await stakingToken.getAddress()], [rewardAmount])
 
 			await time.increase(200)
@@ -132,7 +132,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			const rewardAmount = "604800"
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			await time.increase(200)
@@ -158,8 +158,8 @@ export function shouldBehaveLikeSymmStaking() {
 			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount)
 			await symmStaking.connect(user1).deposit(depositAmount, user1.address)
 
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).configureRewardToken(await usdcToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
+			await symmStaking.connect(admin).addRewardToken(await usdcToken.getAddress())
 
 			const usdtBalanceBefore = await usdtToken.balanceOf(user1.address)
 			const usdcBalanceBefore = await usdcToken.balanceOf(user1.address)
@@ -190,8 +190,8 @@ export function shouldBehaveLikeSymmStaking() {
 			const rewardAmount = 604800n
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount.toString())
 			await usdcToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount.toString())
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).configureRewardToken(await usdcToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
+			await symmStaking.connect(admin).addRewardToken(await usdcToken.getAddress())
 			await symmStaking
 				.connect(admin)
 				.notifyRewardAmount([await usdtToken.getAddress(), await usdcToken.getAddress()], [rewardAmount.toString(), rewardAmount.toString()])
@@ -234,9 +234,9 @@ export function shouldBehaveLikeSymmStaking() {
 			// const reward4 = await MockERC20.deploy("RewardToken2", "RT2", 4)
 
 			// Add them as reward tokens
-			await context.symmStaking.connect(admin).configureRewardToken(reward18 ,true)
-			await context.symmStaking.connect(admin).configureRewardToken(reward6 ,true)
-			// await context.symmStaking.connect(admin).configureRewardToken(reward4 ,true)
+			await context.symmStaking.connect(admin).addRewardToken(reward18)
+			await context.symmStaking.connect(admin).addRewardToken(reward6)
+			// await context.symmStaking.connect(admin).addRewardToken(reward4 ,true)
 
 			// Amount to notify for each token
 			const amount18 = BigInt(1209.6e18) //2000 * 604800(1week) * 1e18
@@ -292,108 +292,6 @@ export function shouldBehaveLikeSymmStaking() {
 
 	})
 
-	describe("Config Reward", function () {
-		it("should revert when admin tries remove a reward token that has pending rewards", async function () {
-			// Scenario:
-			// 1. User1 deposits tokens
-			// 2. Admin configures and notifies USDT as reward token
-			// 3. User1 claims after 200 seconds and gets USDT
-			// 4. Admin tries to remove USDT and it gets reverted
-
-			const depositAmount = "604800"
-			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount)
-			await symmStaking.connect(user1).deposit(depositAmount, user1.address)
-
-			// Admin configures and notifies USDT as reward token
-			const rewardAmount = "604800"
-			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
-
-			// Fast forward time by 200 seconds
-			await time.increase(200)
-
-			// User1 claims rewards
-			const user1BalanceBefore = await usdtToken.balanceOf(user1.address)
-			await symmStaking.connect(user1).claimRewards()
-			const user1BalanceAfter = await usdtToken.balanceOf(user1.address)
-			const user1Claimed = user1BalanceAfter - user1BalanceBefore
-
-			expect(user1Claimed).to.equal("200")
-
-			await expect(symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), false)).to.be.revertedWithCustomError(
-				symmStaking,
-				"OngoingRewardPeriodForToken",
-			)
-		})
-
-		it("should be ok to claim ofter DEFAULT_REWARDS_DURATION, and remove reward token", async function () {
-			// Scenario:
-			// 1. User1 deposits 1000 tokens
-			// 2. Admin notifies 604,800 USDT as reward token
-			// 3. User1 claims half of its reward after 302,400 seconds (half of 604,800 = 302,400)
-			// 4. User1 claims the remaining reward after another 302,400 seconds
-			// 5. Admin removes USDT token from rewards using configureRewardToken(usdt, false)
-
-			const depositAmount = "1209600"
-			await stakingToken.connect(user1).approve(await symmStaking.getAddress(), depositAmount)
-			await symmStaking.connect(user1).deposit(depositAmount, user1.address)
-
-			// Admin configures and notifies USDT as reward token
-			const rewardAmount = "604800"
-			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
-
-			// Fast forward time by 302,400 seconds (half of the reward duration)
-			await time.increase(302400)
-
-			// User1 claims half of the reward (302,400 USDT)
-			const user1BalanceBeforeFirstClaim = await usdtToken.balanceOf(user1.address)
-			await symmStaking.connect(user1).claimRewards()
-			const user1BalanceAfterFirstClaim = await usdtToken.balanceOf(user1.address)
-			const user1ClaimedFirstHalf = user1BalanceAfterFirstClaim - user1BalanceBeforeFirstClaim
-
-			expect(user1ClaimedFirstHalf).to.equal("302400") // Half of the total reward
-
-			// Fast forward time by another 402,400 seconds(more than 1 week is passed)
-			await time.increase(402400)
-
-			// User1 claims the remaining reward (302,400 USDT)
-			const user1BalanceBeforeSecondClaim = await usdtToken.balanceOf(user1.address)
-			await symmStaking.connect(user1).claimRewards()
-			const user1BalanceAfterSecondClaim = await usdtToken.balanceOf(user1.address)
-			const user1ClaimedSecondHalf = user1BalanceAfterSecondClaim - user1BalanceBeforeSecondClaim
-
-			// The remaining half of the reward (two less because of calculation precision)
-			expect(user1ClaimedSecondHalf).to.equal("302398")
-			// Admin removes USDT token from reward pool
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), false)
-
-			// Fast forward time again to see if user1 can claim after USDT removal
-			await time.increase(200)
-
-			// User1 tries to claim rewards again but should get nothing
-			const user1BalanceBeforeFinalClaim = await usdtToken.balanceOf(user1.address)
-			await symmStaking.connect(user1).claimRewards()
-			const user1BalanceAfterFinalClaim = await usdtToken.balanceOf(user1.address)
-			const user1FinalClaimed = user1BalanceAfterFinalClaim - user1BalanceBeforeFinalClaim
-
-			expect(user1FinalClaimed).to.equal(0n) // User should get nothing since the reward token was removed
-		})
-
-		it("should revert if admin tries to remove a token that was never whitelisted", async function () {
-			// Scenario:
-			// 1. admin calls configureRewardToken(usdt, false) without whitelisting USDT beforehand
-			// 2. should revert with TokenWhitelistStatusUnchanged (or similar)
-
-			await expect(symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), false)).to.be.revertedWithCustomError(
-				symmStaking,
-				"TokenWhitelistStatusUnchanged",
-			)
-		})
-	})
-
 	describe("claimFor", function () {
 		it("should allow an admin to claim rewards on behalf of a user", async function () {
 			// Scenario: Admin claims rewards for user1
@@ -407,7 +305,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			// Admin configures and notifies rewards
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			// Fast forward time to accumulate some rewards
@@ -434,7 +332,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			// Admin configures and notifies rewards
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			// Fast forward time to accumulate some rewards
@@ -455,7 +353,7 @@ export function shouldBehaveLikeSymmStaking() {
 			await symmStaking.connect(user1).deposit(depositAmount, user1.address)
 
 			// Admin configures and notifies rewards (but none for user1)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			// Fast forward time
@@ -477,7 +375,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			// Admin configures and notifies rewards
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			// Fast forward time
@@ -504,8 +402,8 @@ export function shouldBehaveLikeSymmStaking() {
 			await usdcToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmountUSDC)
 
 			// Admin configures and notifies rewards
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).configureRewardToken(await usdcToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
+			await symmStaking.connect(admin).addRewardToken(await usdcToken.getAddress())
 
 			// Notify rewards (USDT is zero, so it should be ignored)
 			await expect(
@@ -555,7 +453,7 @@ export function shouldBehaveLikeSymmStaking() {
 			// Admin mints and notifies rewards
 			const rewardAmount = "604800"
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			// Fast-forward time
@@ -600,8 +498,8 @@ export function shouldBehaveLikeSymmStaking() {
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
 			await usdcToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
 
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).configureRewardToken(await usdcToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
+			await symmStaking.connect(admin).addRewardToken(await usdcToken.getAddress())
 
 			await stakingToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress(), await usdcToken.getAddress()], [rewardAmount, rewardAmount])
@@ -777,12 +675,12 @@ export function shouldBehaveLikeSymmStaking() {
 			// 2. Others should not be able to perform these actions and should be reverted.
 
 			// Check that admin (who has REWARD_MANAGER_ROLE) can configure and notify rewards
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), "604800")
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], ["604800"])
 
 			// Check that user1 cannot configure or notify rewards
-			await expect(symmStaking.connect(user1).configureRewardToken(await usdtToken.getAddress(), true)).to.be.revertedWithCustomError(
+			await expect(symmStaking.connect(user1).addRewardToken(await usdtToken.getAddress())).to.be.revertedWithCustomError(
 				symmStaking,
 				"AccessControlUnauthorizedAccount",
 			)
@@ -824,7 +722,7 @@ export function shouldBehaveLikeSymmStaking() {
 			await expect(symmStaking.connect(user1).unpause()).to.be.revertedWithCustomError(symmStaking, "AccessControlUnauthorizedAccount")
 
 			// User1 tries to configure and notify reward tokens (should revert, as only REWARD_MANAGER_ROLE is allowed)
-			await expect(symmStaking.connect(user1).configureRewardToken(await usdtToken.getAddress(), true)).to.be.revertedWithCustomError(
+			await expect(symmStaking.connect(user1).addRewardToken(await usdtToken.getAddress())).to.be.revertedWithCustomError(
 				symmStaking,
 				"AccessControlUnauthorizedAccount",
 			)
@@ -837,8 +735,8 @@ export function shouldBehaveLikeSymmStaking() {
 			// 1. Admin configures 2 reward tokens: USDT and USDC
 			// 2. rewardTokensCount should return 2
 
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
-			await symmStaking.connect(admin).configureRewardToken(await usdcToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
+			await symmStaking.connect(admin).addRewardToken(await usdcToken.getAddress())
 
 			const rewardTokensCount = await symmStaking.rewardTokensCount()
 			expect(rewardTokensCount).to.equal(2)
@@ -851,7 +749,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			const rewardAmount = "604800"
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			const lastTime = await symmStaking.lastTimeRewardApplicable(await usdtToken.getAddress())
@@ -869,7 +767,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			const rewardAmount = "604800"
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			await time.increase(200)
@@ -890,7 +788,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			const rewardAmount = "604800"
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			// Fast forward time
@@ -907,7 +805,7 @@ export function shouldBehaveLikeSymmStaking() {
 
 			const rewardAmount = "604800"
 			await usdtToken.connect(admin).approve(await symmStaking.getAddress(), rewardAmount)
-			await symmStaking.connect(admin).configureRewardToken(await usdtToken.getAddress(), true)
+			await symmStaking.connect(admin).addRewardToken(await usdtToken.getAddress())
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress()], [rewardAmount])
 
 			const fullPeriodReward = await symmStaking.getFullPeriodReward(await usdtToken.getAddress())
