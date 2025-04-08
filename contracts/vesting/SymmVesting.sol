@@ -32,6 +32,7 @@ contract SymmVesting is Vesting {
 	error SlippageExceeded();
 	error ZeroDivision();
 	error MaxUsdcExceeded();
+	error VestingNotStarted();
 
 	//--------------------------------------------------------------------------
 	// State Variables
@@ -130,6 +131,9 @@ contract SymmVesting is Vesting {
 		_claimUnlockedToken(SYMM, msg.sender);
 
 		VestingPlan storage symmVestingPlan = vestingPlans[SYMM][msg.sender];
+
+		if (symmVestingPlan.startTime > block.timestamp) revert VestingNotStarted();
+
 		uint256 symmLockedAmount = symmVestingPlan.lockedAmount();
 		if (symmLockedAmount < amount) revert InvalidAmount();
 
