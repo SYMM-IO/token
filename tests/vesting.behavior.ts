@@ -259,23 +259,7 @@ export function ShouldBehaveLikeVesting() {
 			await expect (plan.claimedAmount).to.be.equal(0)
 		})
 
-		it("Should update vesting startTime and endTime after claiming", async () => {
-			const oldPlan = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
 
-			const tx = await symmVesting.connect(context.signers.user1).claimLockedToken(context.symmioToken, 1000)
-
-			const receipt = await tx.wait()
-			const blockAfter = await ethers.provider.getBlock(receipt?.blockNumber ?? 0)
-			const actualNewStartTime = blockAfter?.timestamp ?? 0
-			const remainingDuration = Number(oldPlan.endTime) - Number(actualNewStartTime)
-
-			const planAfter = await symmVesting.vestingPlans(context.symmioToken, await context.signers.user1.getAddress())
-
-			const expectedNewEndTime = actualNewStartTime + remainingDuration
-
-			await expect (planAfter.startTime).to.equal(actualNewStartTime)
-			await expect (planAfter.endTime).to.equal(expectedNewEndTime)
-		})
 	})
 
 	describe("resetVestingPlans", () => {

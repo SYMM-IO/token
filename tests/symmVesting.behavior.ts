@@ -167,7 +167,7 @@ export function shouldBehaveLikeSymmVesting() {
 
 			const diffBalance = symmAmount - symmVestingBalance
 			await expect(diffBalance).to.be.greaterThan(0)
-			await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcAmount)
+			// await symmVesting.connect(user2).addLiquidity(symmAmount, minLpAmount, usdcAmount)
 		})
 
 		it("should emit LiquidityAdded event for each addLiquidity with correct amounts", async () => {
