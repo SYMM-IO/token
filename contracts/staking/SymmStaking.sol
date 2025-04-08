@@ -145,9 +145,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	// Mapping from user => reward token => reward amount.
 	mapping(address => mapping(address => uint256)) public rewards;
 
-	// Mapping from reward token to the total pending rewards (i.e. rewards that have been notified but not yet claimed).
-	mapping(address => uint256) public pendingRewards;
-
 	//--------------------------------------------------------------------------
 	// Initialization
 	//--------------------------------------------------------------------------
@@ -251,6 +248,24 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	}
 
 	/**
+	 * @notice Calculates the pending rewards for an account and a specific reward token.
+	 * @param user The user address.
+	 * @param token The reward token address.
+	 * @return reward The amount of unclaimed rewards.
+	 */
+	function userRewards(address user, address token) external view returns (uint256 reward) {
+		reward = rewards[user][token];
+		if (reward > 0) {
+			// Apply reverse scaling for tokens with non-standard decimals
+			uint256 scalingFactor = getScalingFactor(token);
+			if (scalingFactor > 1) {
+				// Divide by scaling factor to get the actual amount to transfer
+				reward = reward / scalingFactor;
+			}
+		}
+	}
+
+	/**
 	 * @notice Returns the reward amount for the entire reward duration.
 	 * @param _rewardsToken The reward token address.
 	 * @return The reward amount for the reward duration.
@@ -328,7 +343,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 			if (!isRewardToken[token]) revert TokenNotWhitelisted(token);
 
 			IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-			pendingRewards[token] += amount;
 			newRates[i] = _addRewardsForToken(token, amount);
 		}
 		emit RewardNotified(tokens, amounts, newRates);
@@ -355,7 +369,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 		_updateRewardsStates(address(0));
 
 		if (token == address(0)) revert ZeroAddress();
-		if (isRewardToken[token] == true) revert TokenAlreadyAdded(token);
+		if (isRewardToken[token]) revert TokenAlreadyAdded(token);
 
 		isRewardToken[token] = true;
 
@@ -436,8 +450,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 					reward = reward / scalingFactor;
 				}
 				rewards[user][token] = 0;
-				pendingRewards[token] -= reward;
-
 				IERC20(token).safeTransfer(user, reward);
 				emit RewardClaimed(user, token, reward);
 			}
