@@ -143,7 +143,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	// Mapping from user => reward token => user paid reward per token.
 	mapping(address => mapping(address => uint256)) public userRewardPerTokenPaid;
 	// Mapping from user => reward token => reward amount.
-	mapping(address => mapping(address => uint256)) private rewards;
+	mapping(address => mapping(address => uint256)) public rewards;
 
 	//--------------------------------------------------------------------------
 	// Initialization
@@ -245,16 +245,6 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 */
 	function earned(address account, address _rewardsToken) external view returns (uint256) {
 		return _earned(account, _rewardsToken) / getScalingFactor(_rewardsToken);
-	}
-
-	/**
-	 * @notice Calculates the pending rewards for an account and a specific reward token.
-	 * @param user The user address.
-	 * @param token The reward token address.
-	 * @return The amount of unclaimed rewards.
-	 */
-	function userRewards(address user, address token) external view returns (uint256) {
-		return rewards[user][token] / getScalingFactor(token);
 	}
 
 	/**
