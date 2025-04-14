@@ -27,6 +27,7 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable{
     uint256 public usersInitiatedCount = 0;
     uint256 public totalVestedAmount = 0; //TODO: totalInitiatedAmount?
     mapping(address=>uint256) public initiatableAmount; // user => amount //TODO: Can be renamed to pendingVestingPlan
+    mapping(address=>uint256) public userVestedAmount; // user => vested amount
 
     constructor(address admin, address _symmAddress, address _symmVestingAddress, uint256 _totalInitiatableSYMM, uint256 launchTimestamp){
         _grantRole(SETTER_ROLE, admin);
@@ -72,6 +73,7 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable{
         );
         totalVestedAmount += initiatableAmount[msg.sender];
         if(totalVestedAmount > maxSymmAmount) revert exceededMaxSymmAmount(totalVestedAmount, maxSymmAmount);
+        userVestedAmount[msg.sender] += initiatableAmount[msg.sender];
         initiatableAmount[msg.sender] = 0;
     }
 
