@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import {IVesting} from "./interfaces/IVesting.sol";
 
-contract SymmVestingRequester is AccessControlEnumerable, Pausable{
+contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable{
 
     error MismatchedArrays();
     error ZeroAmount();
