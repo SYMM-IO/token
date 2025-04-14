@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.18;
 
-import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import {IVesting} from "./interfaces/IVesting.sol";
 
-contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
+contract SymmVestingRequester is AccessControlEnumerable, Pausable{
 
     error MismatchedArrays();
     error ZeroAmount();
@@ -24,10 +24,7 @@ contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeab
     address public symmAddress;
     address public symmVestingAddress;
 
-    function initialize(address admin, address _symmAddress, address _symmVestingAddress) public initializer{
-        __AccessControlEnumerable_init();
-        __Pausable_init();
-
+    constructor(address admin, address _symmAddress, address _symmVestingAddress){
         _grantRole(SETTER_ROLE, admin);
         _grantRole(PAUSER_ROLE, admin);
         _grantRole(UNPAUSER_ROLE, admin);
