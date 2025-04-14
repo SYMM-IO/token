@@ -14,9 +14,9 @@ contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeab
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
-    uint256 public totalTime = 180 days;
+    uint256 public totalDays = 180 days;
     uint256 public penaltyPerDay = 25e16; // 0.25e15
-    uint256 public launchTime;
+    uint256 public launchDay;
     uint256 public totalRegisteredAmount = 0;
     uint256 public totalRegisteredUsers = 0;
     uint256 public totalVestedAmount = 0;
@@ -24,7 +24,7 @@ contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeab
     address public symmAddress;
     address public symmVestingAddress;
 
-    function initializer(address admin, address _symmAddress, address _symmVestingAddress) public initializer{
+    function initialize(address admin, address _symmAddress, address _symmVestingAddress) public initializer{
         __AccessControlEnumerable_init();
         __Pausable_init();
 
@@ -34,7 +34,7 @@ contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeab
 
         symmAddress = _symmAddress;
         symmVestingAddress = _symmVestingAddress;
-        launchTime = block.timestamp;
+        launchDay = (block.timestamp / 1 days) * 1 days;
     }
 
     function registerPlans(address[] memory users, uint256[] memory amounts) external onlyRole(SETTER_ROLE) { //TODO: whenNotPaused?
@@ -45,7 +45,7 @@ contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeab
                 totalRegisteredAmount -= registeredAmounts[users[i]] - amounts[i];
             else
                 totalRegisteredAmount += amounts[i] - registeredAmounts[users[i]];
-            if(registeredAmounts[users[i]]!=0) totalRegisteredUsers += 1;//TODO: How to check it's not already added?
+            if(registeredAmounts[users[i]]!=0) totalRegisteredUsers += 1;//TODO: How to check it's not already added? add them to a mapping?!
             registeredAmounts[users[i]] = amounts[i];
         }
     }
@@ -76,8 +76,9 @@ contract SymmVestingRequester is Initializable, AccessControlEnumerableUpgradeab
     }
 
     function _getEndTime() private view returns(uint256){
-        uint256 timePassed = (block.timestamp / 1days - launchTime / 1days) * 1days;
-        if(timePassed > totalTime) timePassed = totalTime;
-        return block.timestamp + totalTime - timePassed + timePassed * penaltyPerDay / 1e18;
+        uint256 today = (block.timestamp / 1 days) * 1 days;
+        uint256 daysPassed = today - launchDay;
+        if(daysPassed > totalDays) daysPassed = totalDays;
+        return today + totalDays - daysPassed + daysPassed * penaltyPerDay / 1e18;
     }
 }
