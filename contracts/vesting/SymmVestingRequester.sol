@@ -9,6 +9,7 @@ contract SymmVestingRequester is AccessControlEnumerable, Pausable{
 
     error MismatchedArrays();
     error ZeroAmount();
+    error exceededMaxSymmAmount(uint256 exceededAmont, uint256 maxSymmAmount);
 
     bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -27,31 +28,36 @@ contract SymmVestingRequester is AccessControlEnumerable, Pausable{
     uint256 public totalVestedAmount = 0; //TODO: totalInitiatedAmount?
     mapping(address=>uint256) public initiatableAmount; // user => amount //TODO: Can be renamed to pendingVestingPlan
 
-    constructor(address admin, address _symmAddress, address _symmVestingAddress, uint256 _totalInitiatableSYMM){
+    constructor(address admin, address _symmAddress, address _symmVestingAddress, uint256 _totalInitiatableSYMM, uint256 launchTimestamp){
         _grantRole(SETTER_ROLE, admin);
         _grantRole(PAUSER_ROLE, admin);
         _grantRole(UNPAUSER_ROLE, admin);
 
         symmAddress = _symmAddress;
         symmVestingAddress = _symmVestingAddress;
-        launchDay = (block.timestamp / 1 days) * 1 days;
+        launchDay = (launchTimestamp / 1 days) * 1 days;
         maxSymmAmount = _totalInitiatableSYMM;
     }
 
     function setInitiatableVestingAmount(address[] memory users, uint256[] memory amounts) external onlyRole(SETTER_ROLE) { //TODO: whenNotPaused?
         if(users.length != amounts.length)
             revert MismatchedArrays();
+
         for(uint32 i=0; i<users.length; i++){
             if(initiatableAmount[users[i]] > amounts[i])
                 initiatableAmountsSum -= initiatableAmount[users[i]] - amounts[i];
             else
                 initiatableAmountsSum += amounts[i] - initiatableAmount[users[i]];
+
+            if(initiatableAmountsSum > maxSymmAmount) revert exceededMaxSymmAmount(initiatableAmountsSum, maxSymmAmount);
             if(initiatableAmount[users[i]]!=0) usersInitiatedCount += 1;//TODO: How to check it's not already added? add them to a mapping?!
+
             initiatableAmount[users[i]] = amounts[i];
         }
     }
 
     function initiateVestingPlan() external whenNotPaused {
+        //TODO: custom error for checking whether launchDay is reached or not is not gas efficient due to underflow in getEndTime when launchTime is not reached
         if(initiatableAmount[msg.sender] == 0) revert ZeroAmount();
         address[] memory users;
         uint256[] memory amounts;
@@ -65,7 +71,7 @@ contract SymmVestingRequester is AccessControlEnumerable, Pausable{
             amounts
         );
         totalVestedAmount += initiatableAmount[msg.sender];
-        if(totalVestedAmount > maxSymmAmount)
+        if(totalVestedAmount > maxSymmAmount) revert exceededMaxSymmAmount(totalVestedAmount, maxSymmAmount);
         initiatableAmount[msg.sender] = 0;
     }
 
