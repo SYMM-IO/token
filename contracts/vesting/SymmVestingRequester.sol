@@ -56,7 +56,7 @@ contract SymmVestingRequester is AccessControlEnumerable, Pausable{
         IVesting(symmVestingAddress).setupVestingPlans(
             symmAddress,
             block.timestamp,
-            _getEndTime(),
+            getEndTime(),
             users,
             amounts
         );
@@ -72,7 +72,7 @@ contract SymmVestingRequester is AccessControlEnumerable, Pausable{
         _unpause();
     }
 
-    function _getEndTime() private view returns(uint256){
+    function getEndTime() public view returns(uint256){
         uint256 today = (block.timestamp / 1 days) * 1 days;
         uint256 daysPassed = today - launchDay;
         if(daysPassed > totalDays) daysPassed = totalDays;
