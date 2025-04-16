@@ -1,8 +1,9 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { ethers, run } from "hardhat"
 import { e } from "../utils"
-import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking } from "../typechain-types"
+import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking, SymmVestingRequester } from "../typechain-types";
 import * as Process from "process";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 export class RunContext {
 	signers!: {
@@ -18,6 +19,7 @@ export class RunContext {
 	claimSymm!: SymmAllocationClaimer
 	vesting!: Vesting
 	symmStaking!: SymmStaking
+	symmVestingVlanInitializer!: SymmVestingRequester
 }
 
 export async function initializeFixture(): Promise<RunContext> {
@@ -63,6 +65,13 @@ export async function initializeFixture(): Promise<RunContext> {
 		admin: await context.signers.admin.getAddress(),
 		stakingToken: await context.symmioToken.getAddress(),
 	})
+
+	// context.symmVestingVlanInitializer = await run("deploy:SymmVestingPlanInitializer", {
+	// 	admin: await context.signers.admin.getAddress(),
+	// 	symmTokenAddress: await context.symmioToken.getAddress(),
+	// 	symmVestingAddress: await context.vesting.getAddress(),
+	// 	launchTimeStamp: (new Date().getTime() + 7 * 24 * 60 * 60).toString()
+	// })
 
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)
 

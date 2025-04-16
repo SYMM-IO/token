@@ -1,21 +1,22 @@
 import {task} from "hardhat/config";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 
-task("deploy:SymmVestingRequester", "Deploys the SymmVestingRequester contract")
-	.addParam("admin", "The admin of SymmVestingRequester")
-	.addParam("symm_token_address", "Address of the symm token")
-	.addParam("symm_vesting_address", "Address of the symmVestingContract")
-	.setAction(async ({admin, symmAddress, symmVestingAddress}, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
-		console.log("deploy:SymmVestingRequester");
+task("deploy:SymmVestingPlanInitializer", "Deploys the SymmVestingPlanInitializer contract")
+	.addParam("admin", "The admin of SymmVestingPlanInitializer")
+	.addParam("symmTokenAddress", "Address of the symm token")
+	.addParam("symmVestingAddress", "Address of the symmVestingContract")
+	.addParam("launchTimeStamp", "The of the launch in seconds")
+	.setAction(async ({admin, symmAddress, symmVestingAddress, launchTimeStamp}, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
+		console.log("deploy:SymmVestingPlanInitializer");
 
-		const SymmVestingRequester = await ethers.getContractFactory("SymmVestingRequester");
-		const symmVestingRequester = await upgrades.deployProxy(SymmVestingRequester, [admin, symmAddress, symmVestingAddress], {
+		const SymmVestingPlanInitializer = await ethers.getContractFactory("SymmVestingPlanInitializer");
+		const symmVestingPlanInitializer = await upgrades.deployProxy(SymmVestingPlanInitializer, [admin, symmAddress, symmVestingAddress, launchTimeStamp], {
 			unsafeAllow: ["external-library-linking"],
 			initializer: "initialize",
 		})
-		await symmVestingRequester.waitForDeployment();
+		await symmVestingPlanInitializer.waitForDeployment();
 
-		console.log(`SymmVestingRequester Contract deployed at: ${await symmVestingRequester.getAddress()}`)
-		return symmVestingRequester
+		console.log(`symmVestingPlanInitializer Contract deployed at: ${await symmVestingPlanInitializer.getAddress()}`)
+		return symmVestingPlanInitializer
 	}
 )

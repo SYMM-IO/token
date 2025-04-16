@@ -16,7 +16,7 @@ export function shouldBehaveLikeSymmVestingRequester() {
 
 	beforeEach(async () => {
 		context = await loadFixture(initializeFixture)
-		vestingRequester = context.symmVestingRequester
+		vestingRequester = context.symmVestingVlanInitializer
 		vesting = context.vesting
 		admin = context.signers.admin
 		setter = context.signers.setter
