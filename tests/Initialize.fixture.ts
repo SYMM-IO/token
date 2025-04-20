@@ -4,6 +4,7 @@ import { e } from "../utils"
 import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking, SymmVestingRequester } from "../typechain-types";
 import * as Process from "process";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { floor } from "lodash";
 
 export class RunContext {
 	signers!: {
@@ -65,13 +66,14 @@ export async function initializeFixture(): Promise<RunContext> {
 		admin: await context.signers.admin.getAddress(),
 		stakingToken: await context.symmioToken.getAddress(),
 	})
-
-	// context.symmVestingVlanInitializer = await run("deploy:SymmVestingPlanInitializer", {
-	// 	admin: await context.signers.admin.getAddress(),
-	// 	symmTokenAddress: await context.symmioToken.getAddress(),
-	// 	symmVestingAddress: await context.vesting.getAddress(),
-	// 	launchTimeStamp: (new Date().getTime() + 7 * 24 * 60 * 60).toString()
-	// })
+console.log("in 7 days: " + String(floor(Date.now()/1000) + 7 * 24 * 60 * 60) +" - "+ (Date.now()/1000  + 7 * 24 * 60 * 60 ).toString())
+	context.symmVestingVlanInitializer = await run("deploy:SymmVestingPlanInitializer", {
+		admin: await context.signers.admin.getAddress(),
+		symmTokenAddress: await context.symmioToken.getAddress(),
+		symmVestingAddress: await context.vesting.getAddress(),
+		totalInitiatableSYMM: "10000000000000000000000000", //10Me18
+		launchTimeStamp: String(floor(Date.now()/1000) + 7 * 24 * 60 * 60)
+	})
 
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)
 
@@ -86,6 +88,7 @@ export async function initializeFixture(): Promise<RunContext> {
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.claimSymm.getAddress())
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.signers.admin.getAddress())
 	await context.symmStaking.grantRole(await context.symmStaking.REWARD_MANAGER_ROLE(), await context.signers.admin.getAddress())
+	await context.vesting.grantRole(await context.vesting.SETTER_ROLE(), await context.symmVestingVlanInitializer.getAddress())
 
 	return context
 }
