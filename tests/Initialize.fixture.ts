@@ -66,7 +66,7 @@ export async function initializeFixture(): Promise<RunContext> {
 		admin: await context.signers.admin.getAddress(),
 		stakingToken: await context.symmioToken.getAddress(),
 	})
-console.log("in 7 days: " + String(floor(Date.now()/1000) + 7 * 24 * 60 * 60) +" - "+ (Date.now()/1000  + 7 * 24 * 60 * 60 ).toString())
+
 	context.symmVestingVlanInitializer = await run("deploy:SymmVestingPlanInitializer", {
 		admin: await context.signers.admin.getAddress(),
 		symmTokenAddress: await context.symmioToken.getAddress(),

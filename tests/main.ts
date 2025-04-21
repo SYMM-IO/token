@@ -28,7 +28,7 @@ describe("Symmio Token", () => {
 				ShouldBehaveLikeVesting()
 			})
 
-			describe.only("Symm Vesting Plan Initializer", async function () {
+			describe("Symm Vesting Plan Initializer", async function () {
 				shouldBehaveLikeSymmVestingPlanInitializer()
 			})
 		})

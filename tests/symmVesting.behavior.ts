@@ -127,7 +127,7 @@ export function shouldBehaveLikeSymmVesting() {
 		})
 
 		it("should revert if user does not have enough locked SYMM", async () => {
-			const symmAmount = String(999e18)
+			const symmAmount = String(800e18)
 			const minLpAmount = 0
 			await expect(symmVesting.connect(user1).addLiquidity(symmAmount, minLpAmount, user1UsdcAmount)).to.be.revertedWithCustomError(
 				symmVesting,

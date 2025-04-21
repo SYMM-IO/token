@@ -11,7 +11,6 @@ task("deploy:SymmVestingPlanInitializer", "Deploys the SymmVestingPlanInitialize
 		console.log("deploy:SymmVestingPlanInitializer");
 
 		const SymmVestingPlanInitializer = await ethers.getContractFactory("SymmVestingPlanInitializer");
-		console.log(admin, symmTokenAddress, symmVestingAddress, totalInitiatableSYMM, launchTimeStamp)
 		const symmVestingPlanInitializer = await SymmVestingPlanInitializer.deploy(admin, symmTokenAddress, symmVestingAddress, totalInitiatableSYMM, launchTimeStamp)
 		await symmVestingPlanInitializer.waitForDeployment();
 

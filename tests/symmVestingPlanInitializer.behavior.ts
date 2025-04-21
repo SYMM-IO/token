@@ -10,7 +10,7 @@ import { BigNumberish } from "ethers";
 import { e } from "../utils";
 
 
-export function shouldBehaveLikeSymmVestingPlanInitializer() {
+export function  shouldBehaveLikeSymmVestingPlanInitializer() {
 	let context: RunContext;
 	let vestingPlanInitializer: SymmVestingPlanInitializer; // keep the same naming pattern the user showed
 	let admin: SignerWithAddress;
