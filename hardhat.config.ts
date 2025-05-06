@@ -7,11 +7,7 @@ import "hardhat-gas-reporter"
 import { HardhatUserConfig } from "hardhat/config"
 import "solidity-coverage"
 
-import "./tasks/symmAllocationClaimer"
-import "./tasks/symmioToken"
-import "./tasks/symmVesting"
-import "./tasks/symmStaking";
-
+import "./tasks"
 dotenv.config()
 
 const accounts_list: any = [process.env.ACCOUNT]

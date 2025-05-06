@@ -20,3 +20,6 @@ ignition/deployments/chain-31337
 *.csv
 package-lock.json
 rewards
+
+abis
+error.log
