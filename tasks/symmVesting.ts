@@ -42,7 +42,7 @@ task("deploy:vesting", "Deploys the SymmVesting logic and proxy using CREATE2")
 		if (!dryRun) {
 			// 6. Deploy the library via the factory using CREATE2
 			console.log("Deploying library via CREATE2...")
-			const libTx = await create2Factory.deploy(libBytecode, librarySalt)
+				const libTx = await create2Factory.deploy(libBytecode, librarySalt)
 			await libTx.wait()
 			console.log("Library deployed at:", predictedLibAddress)
 		}

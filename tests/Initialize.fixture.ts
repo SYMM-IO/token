@@ -1,10 +1,10 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { ethers, run } from "hardhat"
 import { e } from "../utils"
-import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking, SymmVestingRequester } from "../typechain-types";
-import * as Process from "process";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { floor } from "lodash";
+import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking, SymmVestingPlanInitializer } from "../typechain-types"
+import * as Process from "process"
+import { time } from "@nomicfoundation/hardhat-network-helpers"
+import { floor } from "lodash"
 
 export class RunContext {
 	signers!: {
@@ -20,7 +20,7 @@ export class RunContext {
 	claimSymm!: SymmAllocationClaimer
 	vesting!: Vesting
 	symmStaking!: SymmStaking
-	symmVestingVlanInitializer!: SymmVestingRequester
+	symmVestingVlanInitializer!: SymmVestingPlanInitializer
 }
 
 export async function initializeFixture(): Promise<RunContext> {
@@ -50,16 +50,19 @@ export async function initializeFixture(): Promise<RunContext> {
 		mintFactor: "500000000000000000", //5e17 => %50
 	})
 
-	context.vesting = await run("deploy:Vesting", {
+	context.vesting = await run("deploy:vesting", {
 		admin: await context.signers.admin.getAddress(),
-		lockedClaimPenaltyReceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+		penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
 		pool: Process.env.POOL,
 		router: Process.env.ROUTER,
 		permit2: Process.env.PERMIT2,
 		vault: Process.env.VAULT,
 		symm: Process.env.SYMM,
 		usdc: Process.env.USDC,
-		symmLp: Process.env.SYMM_LP
+		lp: Process.env.SYMM_LP,
+		factory: Process.env.FACTORY,
+		implsalt: "A",
+		proxysalt: "B",
 	})
 
 	context.symmStaking = await run("deploy:SymmStaking", {
@@ -72,7 +75,7 @@ export async function initializeFixture(): Promise<RunContext> {
 		symmTokenAddress: await context.symmioToken.getAddress(),
 		symmVestingAddress: await context.vesting.getAddress(),
 		totalInitiatableSYMM: "10000000000000000000000000", //10Me18
-		launchTimeStamp: String(floor(Date.now()/1000) + 7 * 24 * 60 * 60)
+		launchTimeStamp: String(floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
 	})
 
 	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)

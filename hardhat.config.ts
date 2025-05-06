@@ -44,8 +44,8 @@ export const config: HardhatUserConfig = {
 	networks: {
 		hardhat: {
 			forking: {
-				url: "",
-				blockNumber: 26800831,
+				url: "https://base.drpc.org",
+				blockNumber: 29871098,
 			},
 		},
 		ethereum: {

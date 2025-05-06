@@ -36,7 +36,7 @@ task("deploy:SymmVestingPlanInitializer", "Deploys the SymmVestingPlanInitialize
 				const usersChunk = users.slice(i, i + chunkSize);
 				const amountsChunk = amounts.slice(i, i + chunkSize);
 				try {
-					await symmVestingPlanInitializer.connect(admin).setInitiatableVestingAmount(usersChunk, amountsChunk);
+					await symmVestingPlanInitializer.connect(admin).setPendingAmounts(usersChunk, amountsChunk);
 					console.log(`${i}..${i + chunkSize}: OK`);
 				} catch (error) {
 					console.error(`Error in users=${usersChunk}, amounts=${amountsChunk}`, error);
