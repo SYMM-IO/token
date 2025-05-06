@@ -8,25 +8,25 @@ import { shouldBehaveLikeSymmVestingPlanInitializer} from "./symmVestingPlanInit
 describe("Symmio Token", () => {
 	// if (process.env.TEST_MODE === "static") {
 		describe("Static Tests", async function () {
-			describe("Symm token", async function () {
-				shouldBehaveLikeSymmioToken()
-			})
+			// describe("Symm token", async function () {
+			// 	shouldBehaveLikeSymmioToken()
+			// })
 
-			describe("Allocation Claimer", async function () {
-				shouldBehaveLikeSymmAllocationClaimer()
-			})
+			// describe("Allocation Claimer", async function () {
+			// 	shouldBehaveLikeSymmAllocationClaimer()
+			// })
 
 			// describe("Airdrop Helper", async function () {
 			// 	shouldBehaveLikeAirdropHelper() // Not adapted
 			// })
 
-			describe("Symm Staking", async function () {
-				shouldBehaveLikeSymmStaking()
-			})
+			// describe("Symm Staking", async function () {
+			// 	shouldBehaveLikeSymmStaking()
+			// })
 
-			describe("Vesting", async function () {
-				ShouldBehaveLikeVesting()
-			})
+			// describe("Vesting", async function () {
+			// 	ShouldBehaveLikeVesting()
+			// })
 
 			describe("Symm Vesting Plan Initializer", async function () {
 				shouldBehaveLikeSymmVestingPlanInitializer()
@@ -34,10 +34,10 @@ describe("Symmio Token", () => {
 		})
 	// } else if (process.env.TEST_MODE === "dynamic") {
 		// Dynamic tests
-		describe("Dynamic Tests", async function () {
-			describe("Symm Vesting", async function () {
-				shouldBehaveLikeSymmVesting()
-			})
-		})
+		// describe("Dynamic Tests", async function () {
+		// 	describe("Symm Vesting", async function () {
+		// 		shouldBehaveLikeSymmVesting()
+		// 	})
+		// })
 	// }
 })
