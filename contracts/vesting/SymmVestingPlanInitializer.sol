@@ -31,8 +31,8 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable {
 	//                           CONSTANTS
 	// =============================================================
 
-	uint256 public constant VESTING_DURATION = 60 days;
-	uint256 public constant PENALTY_PER_DAY_BP = 25e16; // 2.5% expressed as 0.25 * 1e18
+	uint256 public constant VESTING_DURATION = 140 days;
+	uint256 public constant PENALTY_PER_DAY_BP = 1e17; // 1% expressed as 0.1 * 1e18
 
 	// =============================================================
 	//                           IMMUTABLES
