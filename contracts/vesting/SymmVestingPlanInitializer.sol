@@ -103,7 +103,7 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable {
 		users[0] = msg.sender;
 		amounts[0] = amount;
 
-		IVesting(vesting).setupVestingPlans(SYMM, block.timestamp, _endTime(), users, amounts);
+		IVesting(vesting).setupVestingPlans(SYMM, block.timestamp, _endTime(block.timestamp), users, amounts);
 
 		vestedAmount[msg.sender] += amount;
 		pendingAmount[msg.sender] = 0;
@@ -129,19 +129,23 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable {
 	 * @notice Calculates the end time for new vesting schedules.
 	 * @dev Launch day has weight 0 penalty, full duration. Each day after increases duration linearly.
 	 */
-	function endTime() external view returns (uint256) {
-		return _endTime();
+	function endTime(uint256 currentTime) external view returns (uint256) {
+		return _endTime(currentTime);
 	}
 
-	function _endTime() internal view returns (uint256) {
-		uint256 today = (block.timestamp / 1 days) * 1 days;
+	function _endTime(uint256 currentTime) internal view returns (uint256) {
+		uint256 today = (currentTime / 1 days) * 1 days;
 		uint256 daysElapsed = today - launchDay;
-
-		if (daysElapsed > VESTING_DURATION) daysElapsed = VESTING_DURATION;
 
 		// Penalty scales linearly: for each day, add PENALTY_PER_DAY_BP bp (1e18 = 100%)
 		uint256 penalty = (daysElapsed * PENALTY_PER_DAY_BP) / 1e18;
-
-		return today + VESTING_DURATION - daysElapsed + penalty;
+		uint256 endTime = VESTING_DURATION + launchDay + penalty;
+		if(endTime < currentTime) {
+			endTime = currentTime + 1 days;
+		}
+		else if (endTime - currentTime < 1 days) {
+		endTime = currentTime + 1 days;
+		}
+		return endTime;
 	}
 }
