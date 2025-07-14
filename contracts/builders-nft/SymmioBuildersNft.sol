@@ -2,8 +2,8 @@
 pragma solidity ^0.8.27;
 
 /**
- * @title  SymmioBuildersNft
- * @notice Advanced ERC721 NFT contract for locking SYMM tokens on the Base chain to enable
+ * @title  SymmioBuildersNftUpgradeable
+ * @notice Upgradeable version of the advanced ERC721 NFT contract for locking SYMM tokens on the Base chain to enable
  *         fee reductions across multiple chains. Each NFT represents a locked amount of SYMM
  *         tokens with customizable branding and comprehensive unlock management capabilities.
  *
@@ -17,18 +17,20 @@ pragma solidity ^0.8.27;
  *         • Granular pause controls for transfers and contract operations
  *         • Role-based access control for administrative and sync functions
  *         • Comprehensive view functions for user and system queries
+ *         • TransparentUpgradeableProxy pattern for secure upgrades
  *
  *         Integration points include external unlock manager for time-locked releases,
  *         fee collector contracts for cross-chain fee reduction tracking, and sync
  *         mechanisms for maintaining consistency across multiple blockchain networks.
  */
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /* ────────────────────────── External Interfaces ────────────────────────── */
 
@@ -69,7 +71,13 @@ interface ISymmFeeCollector {
 	function onLockedAmountChanged(int256 amount) external;
 }
 
-contract SymmioBuildersNft is ERC721Enumerable, AccessControlEnumerable, Pausable, ReentrancyGuard {
+contract SymmioBuildersNftUpgradeable is
+	Initializable,
+	ERC721EnumerableUpgradeable,
+	AccessControlEnumerableUpgradeable,
+	PausableUpgradeable,
+	ReentrancyGuardUpgradeable
+{
 	using SafeERC20 for IERC20;
 
 	/* ─────────────────────────────── Roles ─────────────────────────────── */
@@ -91,8 +99,8 @@ contract SymmioBuildersNft is ERC721Enumerable, AccessControlEnumerable, Pausabl
 
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
-	/// @notice The SYMM token contract address (immutable for gas efficiency).
-	IERC20Burnable public immutable SYMM;
+	/// @notice The SYMM token contract address.
+	IERC20Burnable public SYMM;
 
 	/// @notice The unlock manager contract for handling token unlock processes.
 	ISymmUnlockManager public unlockManager;
@@ -114,6 +122,9 @@ contract SymmioBuildersNft is ERC721Enumerable, AccessControlEnumerable, Pausabl
 
 	/// @notice Mapping of token ID to its related fee collector addresses for fee reduction tracking.
 	mapping(uint256 => address[]) public tokenRelatedFeeCollectors;
+
+	/// @dev This empty reserved space is put in place to allow future versions to add new variables without shifting down storage in the inheritance chain.
+	uint256[50] private __gap;
 
 	/* ─────────────────────────────── Events ─────────────────────────────── */
 
@@ -222,18 +233,32 @@ contract SymmioBuildersNft is ERC721Enumerable, AccessControlEnumerable, Pausabl
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
+	/// @custom:oz-upgrades-unsafe-allow constructor
+	constructor() {
+		_disableInitializers();
+	}
+
 	/**
-	 * @notice Initialize the SymmioBuildersNft contract with core parameters.
+	 * @notice Initialize the upgradeable SymmioBuildersNft contract with core parameters.
 	 * @param _symm           Address of the SYMM token contract.
 	 * @param _admin          Address to receive admin and all role assignments.
 	 * @param _minLockAmount  Minimum amount of SYMM tokens required to mint an NFT.
 	 *
 	 * @dev Sets up the ERC721 contract, assigns comprehensive roles, and validates inputs.
+	 *      This function replaces the constructor for upgradeable contracts.
 	 */
-	constructor(address _symm, address _admin, uint256 _minLockAmount) ERC721("Symmio Builders NFT", "BUILDERS") {
+	function initialize(address _symm, address _admin, uint256 _minLockAmount) public initializer {
 		if (_symm == address(0) || _admin == address(0)) revert ZeroAddress();
 		if (_minLockAmount == 0) revert ZeroAmount();
 
+		// Initialize parent contracts
+		__ERC721_init("Symmio Builders NFT", "BUILDERS");
+		__ERC721Enumerable_init();
+		__AccessControlEnumerable_init();
+		__Pausable_init();
+		__ReentrancyGuard_init();
+
+		// Set contract-specific state
 		SYMM = IERC20Burnable(_symm);
 		minLockAmount = _minLockAmount;
 
@@ -561,6 +586,18 @@ contract SymmioBuildersNft is ERC721Enumerable, AccessControlEnumerable, Pausabl
 		emit FeeCollectorRemoved(tokenId, feeCollector);
 	}
 
+	/* ────────────────────────── Version & Info ────────────────────────── */
+
+	/**
+	 * @notice Get the current contract version.
+	 * @return The version string of the current contract.
+	 *
+	 * @dev This can be overridden in future upgrades to track versions.
+	 */
+	function version() external pure returns (string memory) {
+		return "1.0.0";
+	}
+
 	/* ────────────────────────── View Functions ────────────────────────── */
 
 	/**
@@ -646,9 +683,11 @@ contract SymmioBuildersNft is ERC721Enumerable, AccessControlEnumerable, Pausabl
 	 * @param interfaceId Interface ID to check.
 	 * @return Whether the interface is supported.
 	 *
-	 * @dev Supports both ERC721Enumerable and AccessControlEnumerable interfaces.
+	 * @dev Supports ERC721Enumerable and AccessControlEnumerable interfaces.
 	 */
-	function supportsInterface(bytes4 interfaceId) public view override(ERC721Enumerable, AccessControlEnumerable) returns (bool) {
+	function supportsInterface(
+		bytes4 interfaceId
+	) public view override(ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable) returns (bool) {
 		return super.supportsInterface(interfaceId);
 	}
 }

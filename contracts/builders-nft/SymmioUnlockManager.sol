@@ -21,13 +21,16 @@ pragma solidity ^0.8.27;
  *         The contract coordinates between SymmioBuildersNFT for lock management and external
  *         vesting contracts for token distribution, ensuring secure and controlled token unlocking
  *         with configurable time-based restrictions and user flexibility.
+ *
+ * @dev    This contract is designed to be used with OpenZeppelin's TransparentUpgradeableProxy.
  */
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /* ────────────────────────── External Interfaces ────────────────────────── */
 
@@ -84,7 +87,7 @@ interface IVesting {
 	function setupVestingPlans(address token, uint256 startTime, uint256 endTime, address[] memory users, uint256[] memory amounts) external;
 }
 
-contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard {
+contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
 
 	/* ─────────────────────────────── Roles ─────────────────────────────── */
@@ -100,14 +103,14 @@ contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard
 
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
-	/// @notice The SymmioBuildersNFT contract (immutable for gas optimization).
-	ISymmioBuildersNft public immutable symmBuildersNft;
+	/// @notice The SymmioBuildersNFT contract.
+	ISymmioBuildersNft public symmBuildersNft;
 
 	/// @notice The Vesting contract for managing token vesting plans.
 	IVesting public vestingContract;
 
-	/// @notice The SYMM token contract (immutable for gas optimization).
-	IERC20 public immutable SYMM;
+	/// @notice The SYMM token contract.
+	IERC20 public SYMM;
 
 	/// @notice Duration of the cliff period in seconds before tokens can be unlocked.
 	uint256 public cliffDuration;
@@ -123,6 +126,9 @@ contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard
 
 	/// @notice Mapping of NFT token ID to array of associated unlock request IDs.
 	mapping(uint256 => uint256[]) public tokenUnlockIds;
+
+	/// @dev This empty reserved space is put in place to allow future versions to add new variables without shifting down storage in the inheritance chain.
+	uint256[50] private __gap;
 
 	/* ─────────────────────────────── Structs ─────────────────────────────── */
 
@@ -213,6 +219,11 @@ contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
+	/// @custom:oz-upgrades-unsafe-allow constructor
+	constructor() {
+		_disableInitializers();
+	}
+
 	/**
 	 * @notice Initialize the SymmUnlockManager with core contracts and configuration.
 	 * @param _symmBuildersNft  Address of the SymmioBuildersNFT contract.
@@ -223,8 +234,16 @@ contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard
 	 * @param _vestingDuration  Duration of the vesting period in seconds.
 	 *
 	 * @dev Sets up access control and validates all inputs. Reverts on zero addresses or invalid durations.
+	 *      This replaces the constructor for upgradeable contracts.
 	 */
-	constructor(address _symmBuildersNft, address _symm, address _vestingContract, address _admin, uint256 _cliffDuration, uint256 _vestingDuration) {
+	function initialize(
+		address _symmBuildersNft,
+		address _symm,
+		address _vestingContract,
+		address _admin,
+		uint256 _cliffDuration,
+		uint256 _vestingDuration
+	) public initializer {
 		if (_symmBuildersNft == address(0) || _symm == address(0) || _vestingContract == address(0) || _admin == address(0)) {
 			revert ZeroAddress();
 		}
@@ -232,12 +251,22 @@ contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard
 			revert InvalidDuration();
 		}
 
+		// Initialize parent contracts
+		__AccessControlEnumerable_init();
+		__Pausable_init();
+		__ReentrancyGuard_init();
+
+		// Set contract addresses and parameters
 		symmBuildersNft = ISymmioBuildersNft(_symmBuildersNft);
 		SYMM = IERC20(_symm);
 		vestingContract = IVesting(_vestingContract);
 		cliffDuration = _cliffDuration;
 		vestingDuration = _vestingDuration;
 
+		// Initialize counter
+		_unlockIdCounter = 0;
+
+		// Grant roles to admin
 		_grantRole(DEFAULT_ADMIN_ROLE, _admin);
 		_grantRole(SETTER_ROLE, _admin);
 		_grantRole(PAUSER_ROLE, _admin);
@@ -540,5 +569,14 @@ contract SymmUnlockManager is AccessControlEnumerable, Pausable, ReentrancyGuard
 		}
 
 		return cliffEndTime - block.timestamp;
+	}
+
+	/**
+	 * @notice Returns the current version of the contract.
+	 * @return Version string of the contract.
+	 * @dev This function can be used to verify which version of the contract is deployed.
+	 */
+	function version() external pure returns (string memory) {
+		return "1.0.0";
 	}
 }
