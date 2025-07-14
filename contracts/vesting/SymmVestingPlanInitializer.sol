@@ -150,7 +150,7 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable {
 
 		// Penalty scales linearly: for each day, add PENALTY_PER_DAY_BP bp (1e18 = 100%)
 		uint256 penalty = (daysElapsed * PENALTY_PER_DAY_BP) / 1e18;
-		uint256 endTime = VESTING_DURATION + launchDay + penalty;
-		return endTime;
+		uint256 et = VESTING_DURATION + launchDay + penalty;
+		return et;
 	}
 }
