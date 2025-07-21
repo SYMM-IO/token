@@ -1,6 +1,6 @@
 import { task, types } from "hardhat/config"
 
-task("deploy:staking", "Deploys the SymmStaking logic and proxy using CREATE2")
+task("deploy:SymmStaking", "Deploys the SymmStaking logic and proxy using CREATE2")
 	.addParam("admin", "The admin of the SymmStaking contract")
 	.addParam("token", "The address of the staking token")
 	.addParam("factory", "The deployed Create2Factory contract address")
@@ -79,8 +79,9 @@ task("deploy:staking", "Deploys the SymmStaking logic and proxy using CREATE2")
 			console.log("Deterministic TransparentUpgradeableProxy deployed at:", predictedProxyAddress)
 		}
 
-		return {
-			implementation: predictedImplAddress,
-			proxy: predictedProxyAddress,
-		}
+		// return {
+		// 	implementation: predictedImplAddress,
+		// 	proxy: predictedProxyAddress,
+		// }
+		return await ethers.getContractAt("SymmStaking", predictedProxyAddress)
 	})

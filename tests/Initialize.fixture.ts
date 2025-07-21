@@ -1,7 +1,14 @@
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { ethers, run } from "hardhat"
 import { e } from "../utils"
-import { SymmAllocationClaimer, Symmio, Vesting, SymmStaking, SymmVestingPlanInitializer } from "../typechain-types"
+import {
+	SymmAllocationClaimer,
+	Symmio,
+	Vesting,
+	SymmStaking,
+	SymmVestingPlanInitializer,
+	VestingV2,
+} from "../typechain-types";
 import * as Process from "process"
 import { time } from "@nomicfoundation/hardhat-network-helpers"
 import { floor } from "lodash"
@@ -18,7 +25,7 @@ export class RunContext {
 	}
 	symmioToken!: Symmio
 	claimSymm!: SymmAllocationClaimer
-	vesting!: Vesting
+	vesting!: VestingV2
 	symmStaking!: SymmStaking
 	symmVestingVlanInitializer!: SymmVestingPlanInitializer
 }
@@ -50,7 +57,22 @@ export async function initializeFixture(): Promise<RunContext> {
 		mintFactor: "500000000000000000", //5e17 => %50
 	})
 
-	context.vesting = await run("deploy:vesting", {
+	// context.vesting = await run("deploy:vesting", {
+	// 	admin: await context.signers.admin.getAddress(),
+	// 	penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+	// 	pool: Process.env.POOL,
+	// 	router: Process.env.ROUTER,
+	// 	permit2: Process.env.PERMIT2,
+	// 	vault: Process.env.VAULT,
+	// 	symm: Process.env.SYMM,
+	// 	usdc: Process.env.USDC,
+	// 	lp: Process.env.SYMM_LP,
+	// 	factory: Process.env.FACTORY,
+	// 	implsalt: "1",
+	// 	proxysalt: "2",
+	// })
+
+	context.vesting = await run("deploy:vestingV2", {
 		admin: await context.signers.admin.getAddress(),
 		penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
 		pool: Process.env.POOL,
@@ -61,20 +83,20 @@ export async function initializeFixture(): Promise<RunContext> {
 		usdc: Process.env.USDC,
 		lp: Process.env.SYMM_LP,
 		factory: Process.env.FACTORY,
-		implsalt: "A",
-		proxysalt: "B",
+		implsalt: "1",
+		proxysalt: "2",
 	})
 
 	context.symmStaking = await run("deploy:SymmStaking", {
 		admin: await context.signers.admin.getAddress(),
-		stakingToken: await context.symmioToken.getAddress(),
+		token: await context.symmioToken.getAddress(),
+		factory: Process.env.FACTORY,
 	})
 
 	context.symmVestingVlanInitializer = await run("deploy:SymmVestingPlanInitializer", {
-		admin: await context.signers.admin.getAddress(),
 		symmTokenAddress: await context.symmioToken.getAddress(),
 		symmVestingAddress: await context.vesting.getAddress(),
-		totalInitiatableSYMM: "10000000000000000000000000", //10Me18
+		totalInitiatableSYMM: "1000000000000000000000000000", //10Me18
 		launchTimeStamp: String(floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
 	})
 

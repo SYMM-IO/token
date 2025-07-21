@@ -1,7 +1,7 @@
 import { task, types } from "hardhat/config"
 
-task("deploy:vesting", "Deploys the SymmVesting logic and proxy using CREATE2")
-	.addParam("admin", "The admin of the SymmVesting contract")
+task("deploy:vestingV2", "Deploys the SymmVestingV2 logic and proxy using CREATE2")
+	.addParam("admin", "The admin of the SymmVestingV2 contract")
 	.addParam("penaltyreceiver", "Address that receives the penalty")
 	.addParam("pool", "Address of the pool")
 	.addParam("router", "Address of the router")
@@ -14,7 +14,7 @@ task("deploy:vesting", "Deploys the SymmVesting logic and proxy using CREATE2")
 	.addParam("implsalt", "Salt for deploying the implementation contract", undefined, types.string, true)
 	.addParam("proxysalt", "Salt for deploying the proxy contract", undefined, types.string, true)
 	.setAction(async ({ admin, penaltyreceiver, pool, router, permit2, vault, symm, usdc, lp, factory, implsalt, proxysalt }, { ethers }) => {
-		console.log("Deploying deterministic contracts for SymmVesting...")
+		console.log("Deploying deterministic contracts for SymmVestingV2...")
 		const dryRun = false
 
 		// 1. Deploy the VestingPlanOps library first
@@ -50,7 +50,7 @@ task("deploy:vesting", "Deploys the SymmVesting logic and proxy using CREATE2")
 		console.log()
 
 		// 7. Get the contract factory for the logic contract with library linkage
-		const SymmVestingFactory = await ethers.getContractFactory("SymmVesting", {
+		const SymmVestingFactory = await ethers.getContractFactory("SymmVestingV2", {
 			libraries: {
 				VestingPlanOps: predictedLibAddress,
 			},
@@ -64,7 +64,7 @@ task("deploy:vesting", "Deploys the SymmVesting logic and proxy using CREATE2")
 		}
 
 		// 9. Compute a deterministic salt for implementation if not provided
-		const implementationSalt = implsalt || ethers.keccak256(ethers.toUtf8Bytes(`vesting`))
+		const implementationSalt = implsalt || ethers.keccak256(ethers.toUtf8Bytes(`vestingV2`))
 		console.log("Implementation salt:", implementationSalt)
 
 		// 10. Compute the predicted implementation address
@@ -130,5 +130,5 @@ task("deploy:vesting", "Deploys the SymmVesting logic and proxy using CREATE2")
 		// 	implementation: predictedImplAddress,
 		// 	proxy: predictedProxyAddress,
 		// }
-		return await ethers.getContractAt("SymmVesting", predictedProxyAddress)
+		return await ethers.getContractAt("SymmVestingV2", predictedProxyAddress)
 	})

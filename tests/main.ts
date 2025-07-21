@@ -4,6 +4,7 @@ import { shouldBehaveLikeSymmStaking } from "./symmStaking.behavior"
 import { shouldBehaveLikeSymmVesting } from "./symmVesting.behavior"
 import { ShouldBehaveLikeVesting } from "./vesting.behavior"
 import { shouldBehaveLikeSymmVestingPlanInitializer} from "./symmVestingPlanInitializer.behavior"
+import { ShouldBehaveLikeVestingV2 } from "./vestingV2.behavior";
 
 describe("Symmio Token", () => {
 	// if (process.env.TEST_MODE === "static") {
@@ -28,8 +29,12 @@ describe("Symmio Token", () => {
 			// 	ShouldBehaveLikeVesting()
 			// })
 
-			describe("Symm Vesting Plan Initializer", async function () {
-				shouldBehaveLikeSymmVestingPlanInitializer()
+			// describe("Symm Vesting Plan Initializer", async function () {
+			// 	shouldBehaveLikeSymmVestingPlanInitializer()
+			// })
+
+			describe("Vesting V2", async function () {
+				ShouldBehaveLikeVestingV2()
 			})
 		})
 	// } else if (process.env.TEST_MODE === "dynamic") {

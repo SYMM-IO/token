@@ -23,13 +23,13 @@ pragma solidity >=0.8.18;
  *         OpenZeppelin's upgradeable contracts for security and access control.
  */
 
-import { VestingPlanOps, VestingPlan } from "./libraries/LibVestingPlan.sol";
-import { AccessControlEnumerableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {VestingPlanOps, VestingPlan} from "./libraries/LibVestingPlan.sol";
+import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 contract VestingV2 is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
@@ -185,8 +185,8 @@ contract VestingV2 is Initializable, AccessControlEnumerableUpgradeable, Pausabl
 		uint256 endTime,
 		address[] memory users,
 		uint256[] memory amounts
-	) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant {
-		_setupVestingPlans(token, startTime, endTime, users, amounts);
+	) external onlyRole(SETTER_ROLE) whenNotPaused nonReentrant returns (uint256[] memory) {
+		return _setupVestingPlans(token, startTime, endTime, users, amounts);
 	}
 
 	/**
@@ -308,9 +308,16 @@ contract VestingV2 is Initializable, AccessControlEnumerableUpgradeable, Pausabl
 	 *
 	 * @dev Creates sequential plan IDs and updates total vested amounts.
 	 */
-	function _setupVestingPlans(address token, uint256 startTime, uint256 endTime, address[] memory users, uint256[] memory amounts) internal {
+	function _setupVestingPlans(
+		address token,
+		uint256 startTime,
+		uint256 endTime,
+		address[] memory users,
+		uint256[] memory amounts
+	) internal returns (uint256[] memory) {
 		if (users.length != amounts.length) revert MismatchArrays();
 		uint256 len = users.length;
+		uint256[] memory planIds = new uint256[](len);
 		// Iterate through users to set up individual vesting plans
 		for (uint256 i = 0; i < len; i++) {
 			address user = users[i];
@@ -322,10 +329,12 @@ contract VestingV2 is Initializable, AccessControlEnumerableUpgradeable, Pausabl
 			VestingPlan storage vestingPlan = vestingPlans[token][user][planId];
 			vestingPlan.setup(amount, startTime, endTime);
 
+			planIds[i] = planId;
 			// Increment plan count for the user
 			userVestingPlanCount[token][user]++;
 			emit VestingPlanSetup(token, user, planId, amount, startTime, endTime);
 		}
+		return planIds;
 	}
 
 	/**
