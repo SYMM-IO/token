@@ -27,7 +27,7 @@ task("deploy:SymmVestingPlanInitializer", "Deploys the SymmVestingPlanInitialize
 				Available: string[]
 			} = JSON.parse(data);
 
-			const chunkSize = 1000;
+			const chunkSize = 100;
 			const users = user_available.Users;
 			const amounts = user_available.Available;
 
