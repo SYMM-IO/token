@@ -1,20 +1,25 @@
 import "./interfaces/IVesting.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "hardhat/console.sol";
+import { AccessControlEnumerableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 interface ISymmVestingPlanInitializer {
 	function endTimeStartsAt(uint256 _timestamp) external view returns (uint256);
 }
 
-contract VestingUpsertManager is AccessControl {
+contract VestingUpsertManager is Initializable, AccessControlEnumerableUpgradeable {
 	IVesting public vesting;
-	ISymmVestingPlanInitializer public initializer;
+	ISymmVestingPlanInitializer public planInitializer;
 
 	bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-	constructor(address admin, address vestingAddress, address vestingPlanAddress) {
+	function initialize(
+		address admin,
+		address vestingAddress,
+		address vestingPlanAddress
+	) public initializer {
+		__AccessControl_init();
 		vesting = IVesting(vestingAddress);
-		initializer = ISymmVestingPlanInitializer(vestingPlanAddress);
+		planInitializer = ISymmVestingPlanInitializer(vestingPlanAddress);
 		_grantRole(OPERATOR_ROLE, admin);
 	}
 
@@ -25,7 +30,7 @@ contract VestingUpsertManager is AccessControl {
 	) external onlyRole(OPERATOR_ROLE) {
 		require(users.length == newAmounts.length, "Length mismatch");
 		uint256 startTime = block.timestamp;
-		uint256 endTime = initializer.endTimeStartsAt(startTime);
+		uint256 endTime = planInitializer.endTimeStartsAt(startTime);
 
 		address[] memory toSetup = new address[](users.length);
 		uint256[] memory toSetupAmounts = new uint256[](users.length);
@@ -49,8 +54,6 @@ contract VestingUpsertManager is AccessControl {
 				resetCount++;
 			}
 		}
-		console.log("setup:", setupCount);
-		console.log("reset:", resetCount);
 
 		if (setupCount > 0) {
 			vesting.setupVestingPlans(
