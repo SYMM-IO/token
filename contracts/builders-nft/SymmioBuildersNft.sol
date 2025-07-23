@@ -10,10 +10,10 @@ pragma solidity ^0.8.27;
  *         The manager contract handles all lock data, unlock processes, and fee management.
  */
 
-import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 
 contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
 	/* ─────────────────────────────── Roles ─────────────────────────────── */

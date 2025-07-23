@@ -10,7 +10,7 @@ pragma solidity ^0.8.27;
  *         • SYMM token locking with burning and without burning (for MINTER_ROLE)
  *         • Lock data management for all NFTs
  *         • NFT merging functionality
- *         • Integration with unlock manager for time-locked releases
+ *         • Time-locked unlock functionality
  *         • Fee collector management and notifications
  *         • Cross-chain synchronization capabilities
  *         • Transfer restrictions based on unlock status
