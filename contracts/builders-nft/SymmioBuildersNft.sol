@@ -14,8 +14,16 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import "./interfaces/ISymmioBuildersNft.sol";
 
-contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
+contract SymmioBuildersNft is
+	Initializable,
+	ERC721EnumerableUpgradeable,
+	AccessControlEnumerableUpgradeable,
+	PausableUpgradeable,
+	ISymmioBuildersNft
+{
 	/* ─────────────────────────────── Roles ─────────────────────────────── */
 
 	/// @notice Role for minting NFTs through the manager contract.
@@ -30,13 +38,19 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 	/// @notice Role for unpausing the contract operations.
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
+	/// @notice Role for pausing/unpausing NFT transfers specifically.
+	bytes32 public constant TRANSFER_PAUSER_ROLE = keccak256("TRANSFER_PAUSER_ROLE");
+
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
 	/// @notice Counter for generating unique token IDs sequentially.
 	uint256 private _tokenIdCounter;
 
-	/// @notice Mapping of token ID to its brand name.
-	mapping(uint256 => string) public brandNames;
+	/// @notice Whether transfers are paused.
+	bool public transfersPaused;
+
+	/// @notice Mapping of token ID to its lock data.
+	mapping(uint256 => ISymmioBuildersNft.LockData) public lockData;
 
 	/// @dev This empty reserved space is put in place to allow future versions to add new variables without shifting down storage in the inheritance chain.
 	uint256[50] private __gap;
@@ -47,21 +61,32 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 	 * @notice Emitted when an NFT is minted.
 	 * @param to        Address receiving the NFT.
 	 * @param tokenId   ID of the minted NFT.
-	 * @param brandName Brand name associated with the NFT.
+	 * @param amount    Amount of SYMM tokens locked.
+	 * @param name      Name associated with the NFT.
 	 */
-	event NFTMinted(address indexed to, uint256 indexed tokenId, string brandName);
+	event NFTMinted(address indexed to, uint256 indexed tokenId, uint256 amount, string name);
 
 	/**
-	 * @notice Emitted when an NFT's brand name is updated.
-	 * @param tokenId      ID of the NFT.
-	 * @param newBrandName New brand name assigned.
+	 * @notice Emitted when an NFT's lock data is updated.
+	 * @param tokenId            ID of the NFT.
+	 * @param amount             Amount of SYMM tokens locked.
+	 * @param unlockingAmount    Amount of SYMM tokens being unlocked.
+	 * @param name               Name associated with the NFT.
 	 */
-	event BrandNameUpdated(uint256 indexed tokenId, string newBrandName);
+	event LockDataUpdated(uint256 indexed tokenId, uint256 amount, uint256 unlockingAmount, string name);
+
+	/**
+	 * @notice Emitted when the transfer pause state is updated.
+	 * @param paused New pause state (true for paused, false for unpaused).
+	 */
+	event TransfersPausedUpdated(bool paused);
 
 	/* ─────────────────────────────── Errors ─────────────────────────────── */
 
 	error NotTokenOwner(); // caller is not the owner of the NFT
 	error ZeroAddress(); // zero address provided for critical parameters
+	error TransfersPaused(); // transfers are paused
+	error TokenHasActiveUnlock(); // token has an active unlock
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -73,12 +98,11 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 	/**
 	 * @notice Initialize the upgradeable SymmioBuildersNft contract.
 	 * @param _admin   Address to receive admin and all role assignments.
-	 * @param _manager Address of the manager contract to receive minter/burner roles.
 	 *
 	 * @dev Sets up the ERC721 contract and assigns roles.
 	 */
-	function initialize(address _admin, address _manager) public initializer {
-		if (_admin == address(0) || _manager == address(0)) revert ZeroAddress();
+	function initialize(address _admin) public initializer {
+		if (_admin == address(0)) revert ZeroAddress();
 
 		// Initialize parent contracts
 		__ERC721_init("Symmio Builders NFT", "BUILDERS");
@@ -90,10 +114,6 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 		_grantRole(DEFAULT_ADMIN_ROLE, _admin);
 		_grantRole(PAUSER_ROLE, _admin);
 		_grantRole(UNPAUSER_ROLE, _admin);
-
-		// Grant minter and burner roles to manager
-		_grantRole(MINTER_ROLE, _manager);
-		_grantRole(BURNER_ROLE, _manager);
 	}
 
 	/* ────────────────────────── Core Functions ────────────────────────── */
@@ -101,37 +121,37 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 	/**
 	 * @notice Mint a new NFT with a brand name.
 	 * @param to        Address to mint the NFT to.
-	 * @param brandName Brand name for the NFT.
+	 * @param amount    Amount of SYMM tokens to lock.
+	 * @param name      Name for the NFT.
 	 * @return tokenId  ID of the newly minted NFT.
 	 *
 	 * @dev Only callable by addresses with MINTER_ROLE (typically the manager contract).
 	 */
-	function mint(address to, string memory brandName) external onlyRole(MINTER_ROLE) whenNotPaused returns (uint256 tokenId) {
+	function mint(address to, uint256 amount, string memory name) external onlyRole(MINTER_ROLE) whenNotPaused returns (uint256 tokenId) {
 		tokenId = _tokenIdCounter++;
 		_safeMint(to, tokenId);
-		brandNames[tokenId] = brandName;
+		lockData[tokenId] = ISymmioBuildersNft.LockData({ amount: amount, lockTimestamp: block.timestamp, unlockingAmount: 0, name: name });
 
-		emit NFTMinted(to, tokenId, brandName);
+		emit NFTMinted(to, tokenId, amount, name);
 	}
 
 	/**
 	 * @notice Mint a specific NFT ID with a brand name (used for cross-chain sync).
 	 * @param to        Address to mint the NFT to.
 	 * @param tokenId   Specific token ID to mint.
-	 * @param brandName Brand name for the NFT.
+	 * @param amount    Amount of SYMM tokens to lock.
+	 * @param name      Name for the NFT.
 	 *
 	 * @dev Only callable by addresses with MINTER_ROLE. Updates counter to avoid conflicts.
 	 */
-	function mintWithId(address to, uint256 tokenId, string memory brandName) external onlyRole(MINTER_ROLE) whenNotPaused {
+	function mintWithId(address to, uint256 tokenId, uint256 amount, string memory name) external onlyRole(MINTER_ROLE) whenNotPaused {
 		// Update token ID counter to avoid conflicts
-		if (tokenId >= _tokenIdCounter) {
-			_tokenIdCounter = tokenId + 1;
-		}
+		if (tokenId >= _tokenIdCounter) _tokenIdCounter = tokenId + 1;
 
 		_safeMint(to, tokenId);
-		brandNames[tokenId] = brandName;
+		lockData[tokenId] = ISymmioBuildersNft.LockData({ amount: amount, lockTimestamp: block.timestamp, unlockingAmount: 0, name: name });
 
-		emit NFTMinted(to, tokenId, brandName);
+		emit NFTMinted(to, tokenId, amount, name);
 	}
 
 	/**
@@ -140,27 +160,52 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 	 *
 	 * @dev Only callable by addresses with BURNER_ROLE (typically the manager contract).
 	 */
-	function burn(uint256 tokenId) external onlyRole(BURNER_ROLE) {
+	function burn(uint256 tokenId) external onlyRole(BURNER_ROLE) whenNotPaused {
 		_burn(tokenId);
-		delete brandNames[tokenId];
+		delete lockData[tokenId];
 	}
 
 	/**
-	 * @notice Update the brand name of an NFT.
+	 * @notice Update the lock data of an NFT.
 	 * @param tokenId       ID of the NFT to update.
-	 * @param newBrandName  New brand name for the NFT.
+	 * @param amount        Amount of SYMM tokens locked.
+	 * @param name          Name associated with the NFT.
 	 *
 	 * @dev Only callable by the NFT owner.
 	 */
-	function updateBrandName(uint256 tokenId, string memory newBrandName) external {
+	function updateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount, string memory name) external onlyRole(MINTER_ROLE) {
 		if (ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 
-		brandNames[tokenId] = newBrandName;
+		lockData[tokenId] = ISymmioBuildersNft.LockData({
+			amount: amount,
+			lockTimestamp: block.timestamp,
+			unlockingAmount: unlockingAmount,
+			name: name
+		});
 
-		emit BrandNameUpdated(tokenId, newBrandName);
+		emit LockDataUpdated(tokenId, amount, unlockingAmount, name);
 	}
 
 	/* ────────────────────────── View Functions ────────────────────────── */
+
+	/**
+	 * @notice Get the lock data of an NFT.
+	 * @param tokenId ID of the NFT.
+	 * @return Lock data of the NFT.
+	 */
+	function getLockData(uint256 tokenId) external view returns (ISymmioBuildersNft.LockData memory) {
+		return lockData[tokenId];
+	}
+
+	/**
+	 * @notice Get the effective locked amount for an NFT (excluding unlocking amounts).
+	 * @param tokenId ID of the NFT.
+	 * @return The effective locked amount available for fee reductions.
+	 */
+	function getEffectiveLockedAmount(uint256 tokenId) external view returns (uint256) {
+		LockData storage data = lockData[tokenId];
+		return data.amount - data.unlockingAmount;
+	}
 
 	/**
 	 * @notice Get all token IDs owned by a user.
@@ -174,6 +219,20 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 			tokenIds[i] = tokenOfOwnerByIndex(user, i);
 		}
 		return tokenIds;
+	}
+
+	/**
+	 * @notice Get the total effective locked amount for a user across all their NFTs.
+	 * @param user Address of the user.
+	 * @return total Total effective locked amount for fee reduction calculations.
+	 */
+	function getUserTotalLocked(address user) external view returns (uint256 total) {
+		uint256 balance = balanceOf(user);
+		for (uint256 i = 0; i < balance; i++) {
+			uint256 tokenId = tokenOfOwnerByIndex(user, i);
+			LockData storage data = lockData[tokenId];
+			total += (data.amount - data.unlockingAmount);
+		}
 	}
 
 	/* ───────────────────────── Pause Controls ───────────────────────── */
@@ -194,12 +253,39 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 		_unpause();
 	}
 
+	/**
+	 * @notice Set the pause state for NFT transfers independently of contract pause.
+	 * @param _paused True to pause transfers, false to unpause.
+	 *
+	 * @dev Only callable by accounts with TRANSFER_PAUSER_ROLE.
+	 */
+	function setTransfersPaused(bool _paused) external onlyRole(TRANSFER_PAUSER_ROLE) {
+		transfersPaused = _paused;
+		emit TransfersPausedUpdated(_paused);
+	}
+
 	/* ───────────────────────── Internal Overrides ───────────────────────── */
 
 	/**
-	 * @dev Override _update to add pause check for transfers.
+	 * @dev Override ERC721 update function to enforce transfer restrictions.
+	 * @param to      Address to transfer to (address(0) for burns).
+	 * @param tokenId ID of the NFT being updated.
+	 * @param auth    Address authorized for the update.
+	 * @return        Address of the previous owner.
+	 *
+	 * @dev Prevents transfers if paused or if the NFT has an active unlock process.
+	 *      Allows minting (from == address(0)) and burning (to == address(0)).
 	 */
-	function _update(address to, uint256 tokenId, address auth) internal virtual override whenNotPaused returns (address) {
+	function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address) {
+		address from = _ownerOf(tokenId);
+
+		// Allow minting (from == address(0)) and burning (to == address(0))
+		// Only restrict actual transfers between addresses
+		if (from != address(0) && to != address(0)) {
+			if (transfersPaused) revert TransfersPaused();
+			if (lockData[tokenId].unlockingAmount > 0) revert TokenHasActiveUnlock();
+		}
+
 		return super._update(to, tokenId, auth);
 	}
 
@@ -212,7 +298,7 @@ contract SymmioBuildersNft is Initializable, ERC721EnumerableUpgradeable, Access
 	 */
 	function supportsInterface(
 		bytes4 interfaceId
-	) public view override(ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable) returns (bool) {
+	) public view override(ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, IERC165) returns (bool) {
 		return super.supportsInterface(interfaceId);
 	}
 

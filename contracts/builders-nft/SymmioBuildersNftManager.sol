@@ -18,12 +18,16 @@ pragma solidity ^0.8.27;
  *         This contract acts as the central logic hub while the NFT contract remains simple.
  */
 
-import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+
+import "./interfaces/ISymmioBuildersNft.sol";
+import "./interfaces/ISymmBuildersNftUnlockManager.sol";
+import "./interfaces/ISymmioBuildersNftManager.sol";
 
 /* ────────────────────────── External Interfaces ────────────────────────── */
 
@@ -33,37 +37,13 @@ interface IERC20Burnable is IERC20 {
 }
 
 /**
- * @notice Interface for the SymmioBuildersNft contract.
- */
-interface ISymmioBuildersNft {
-	function mint(address to, string memory brandName) external returns (uint256 tokenId);
-
-	function mintWithId(address to, uint256 tokenId, string memory brandName) external;
-
-	function burn(uint256 tokenId) external;
-
-	function ownerOf(uint256 tokenId) external view returns (address);
-
-	function brandNames(uint256 tokenId) external view returns (string memory);
-}
-
-/**
- * @notice Interface for the unlock manager contract handling token unlock processes.
- */
-interface ISymmUnlockManager {
-	function initiateUnlock(uint256 tokenId, address owner, uint256 amount) external;
-
-	function isUnlocking(uint256 tokenId) external view returns (bool);
-}
-
-/**
  * @notice Interface for the fee collector contract handling fee collection.
  */
 interface ISymmFeeCollector {
 	function onLockedAmountChanged(int256 amount) external;
 }
 
-contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ISymmioBuildersNftManager {
 	using SafeERC20 for IERC20;
 
 	/* ─────────────────────────────── Roles ─────────────────────────────── */
@@ -80,9 +60,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	/// @notice Role for unpausing the contract operations.
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
-	/// @notice Role for pausing/unpausing NFT transfers specifically.
-	bytes32 public constant TRANSFER_PAUSER_ROLE = keccak256("TRANSFER_PAUSER_ROLE");
-
 	/// @notice Role for syncing cross-chain lock data and minting NFTs.
 	bytes32 public constant SYNC_ROLE = keccak256("SYNC_ROLE");
 
@@ -95,16 +72,10 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	ISymmioBuildersNft public nftContract;
 
 	/// @notice The unlock manager contract for handling token unlock processes.
-	ISymmUnlockManager public unlockManager;
+	ISymmBuildersNftUnlockManager public unlockManager;
 
 	/// @notice The minimum amount of SYMM tokens required to mint an NFT.
 	uint256 public minLockAmount;
-
-	/// @notice Flag indicating whether NFT transfers are paused.
-	bool public transfersPaused;
-
-	/// @notice Mapping of token ID to its comprehensive lock data.
-	mapping(uint256 => LockData) public lockData;
 
 	/// @notice Mapping of token ID to its related fee collector addresses.
 	mapping(uint256 => address[]) public tokenRelatedFeeCollectors;
@@ -115,13 +86,21 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	/* ─────────────────────────────── Events ─────────────────────────────── */
 
 	/**
+	 * @notice Emitted when an NFT is minted.
+	 * @param to        Address receiving the NFT.
+	 * @param tokenId   ID of the minted NFT.
+	 * @param amount    Amount of SYMM tokens locked.
+	 * @param name      Brand name associated with the NFT.
+	 */
+	event NFTMinted(address indexed to, uint256 indexed tokenId, uint256 amount, string name);
+
+	/**
 	 * @notice Emitted when SYMM tokens are locked and an NFT is minted.
 	 * @param user      Address of the user locking tokens.
 	 * @param tokenId   ID of the minted NFT.
 	 * @param amount    Amount of SYMM tokens locked.
-	 * @param brandName Brand name associated with the NFT.
 	 */
-	event TokenLocked(address indexed user, uint256 indexed tokenId, uint256 amount, string brandName);
+	event TokenLocked(address indexed user, uint256 indexed tokenId, uint256 amount);
 
 	/**
 	 * @notice Emitted when an NFT is minted without burning SYMM.
@@ -129,9 +108,9 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param to        Address receiving the NFT.
 	 * @param tokenId   ID of the minted NFT.
 	 * @param amount    Amount associated with the NFT.
-	 * @param brandName Brand name associated with the NFT.
+	 * @param name      Brand name associated with the NFT.
 	 */
-	event NFTMintedWithoutBurn(address indexed minter, address indexed to, uint256 indexed tokenId, uint256 amount, string brandName);
+	event NFTMintedWithoutBurn(address indexed minter, address indexed to, uint256 indexed tokenId, uint256 amount, string name);
 
 	/**
 	 * @notice Emitted when two NFTs are merged into one.
@@ -150,6 +129,14 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	event UnlockInitiated(uint256 indexed tokenId, address indexed owner, uint256 amount);
 
 	/**
+	 * @notice Emitted when an unlock process is completed for an NFT.
+	 * @param tokenId ID of the NFT.
+	 * @param owner   Owner of the NFT.
+	 * @param amount  Amount of tokens to unlock.
+	 */
+	event UnlockCompleted(uint256 indexed tokenId, address indexed owner, uint256 amount);
+
+	/**
 	 * @notice Emitted when the minimum lock amount is updated.
 	 * @param newMinAmount New minimum lock amount.
 	 */
@@ -160,12 +147,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param newUnlockManager New unlock manager address.
 	 */
 	event UnlockManagerUpdated(address newUnlockManager);
-
-	/**
-	 * @notice Emitted when the transfer pause state is updated.
-	 * @param paused New pause state (true for paused, false for unpaused).
-	 */
-	event TransfersPausedUpdated(bool paused);
 
 	/**
 	 * @notice Emitted when an NFT is minted for cross-chain synchronization.
@@ -198,37 +179,10 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	error InvalidTokenId();
 	error ZeroAddress();
 	error ZeroAmount();
-	error TransfersPaused();
 	error UnlockManagerNotSet();
 	error TokenHasActiveUnlock();
 	error UnauthorizedAccess(address caller, address requiredCaller);
 	error LengthMismatch();
-
-	/* ─────────────────────────────── Structs ─────────────────────────────── */
-
-	/**
-	 * @notice Comprehensive lock data structure for each NFT.
-	 * @param amount           Total amount of SYMM tokens locked.
-	 * @param lockTimestamp    Timestamp when the tokens were locked.
-	 * @param unlockingAmount  Amount of tokens currently being unlocked.
-	 */
-	struct LockData {
-		uint256 amount;
-		uint256 lockTimestamp;
-		uint256 unlockingAmount;
-	}
-
-	/* ─────────────────────────────── Modifiers ─────────────────────────────── */
-
-	/**
-	 * @notice Ensure transfers are not paused and token has no active unlock.
-	 * @param tokenId ID of the token to check.
-	 */
-	modifier transfersAllowed(uint256 tokenId) {
-		if (transfersPaused) revert TransfersPaused();
-		if (lockData[tokenId].unlockingAmount > 0) revert TokenHasActiveUnlock();
-		_;
-	}
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -264,7 +218,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		_grantRole(SETTER_ROLE, _admin);
 		_grantRole(PAUSER_ROLE, _admin);
 		_grantRole(UNPAUSER_ROLE, _admin);
-		_grantRole(TRANSFER_PAUSER_ROLE, _admin);
 		_grantRole(SYNC_ROLE, _admin);
 	}
 
@@ -285,15 +238,12 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		SYMM.burnFrom(msg.sender, amount);
 
 		// Mint new NFT
-		tokenId = nftContract.mint(msg.sender, brandName);
-
-		// Store lock data
-		lockData[tokenId] = LockData({ amount: amount, lockTimestamp: block.timestamp, unlockingAmount: 0 });
+		tokenId = nftContract.mint(msg.sender, amount, brandName);
 
 		// Notify fee collectors
 		_notifyFeeCollectors(tokenId, int256(amount));
 
-		emit TokenLocked(msg.sender, tokenId, amount, brandName);
+		emit NFTMinted(msg.sender, tokenId, amount, brandName);
 	}
 
 	/**
@@ -313,10 +263,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		if (amount < minLockAmount) revert AmountBelowMinimum(amount, minLockAmount);
 
 		// Mint new NFT
-		tokenId = nftContract.mint(to, brandName);
-
-		// Store lock data (same as regular mint)
-		lockData[tokenId] = LockData({ amount: amount, lockTimestamp: block.timestamp, unlockingAmount: 0 });
+		tokenId = nftContract.mint(to, amount, brandName);
 
 		// Notify fee collectors
 		_notifyFeeCollectors(tokenId, int256(amount));
@@ -336,12 +283,13 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		SYMM.burnFrom(msg.sender, amount);
 
 		// Increase the locked amount
-		lockData[tokenId].amount += amount;
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		nftContract.updateLockData(tokenId, data.amount + amount, data.unlockingAmount, data.name);
 
 		// Notify fee collectors
 		_notifyFeeCollectors(tokenId, int256(amount));
 
-		emit TokenLocked(msg.sender, tokenId, amount, nftContract.brandNames(tokenId));
+		emit TokenLocked(msg.sender, tokenId, amount);
 	}
 
 	/* ────────────────────────── NFT Management ────────────────────────── */
@@ -355,22 +303,21 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		if (nftContract.ownerOf(targetTokenId) != msg.sender) revert NotTokenOwner();
 		if (nftContract.ownerOf(sourceTokenId) != msg.sender) revert NotTokenOwner();
 
-		LockData storage targetData = lockData[targetTokenId];
-		LockData storage sourceData = lockData[sourceTokenId];
+		ISymmioBuildersNft.LockData memory targetData = nftContract.getLockData(targetTokenId);
+		ISymmioBuildersNft.LockData memory sourceData = nftContract.getLockData(sourceTokenId);
 
 		if (targetData.unlockingAmount > 0 || sourceData.unlockingAmount > 0) revert TokenHasActiveUnlock();
 
 		// Merge locked amounts
 		uint256 newAmount = targetData.amount + sourceData.amount;
-		targetData.amount = newAmount;
+		nftContract.updateLockData(targetTokenId, newAmount, targetData.unlockingAmount, targetData.name);
+
+		// Burn the source NFT and clear its data
+		nftContract.burn(sourceTokenId);
 
 		// Notify fee collectors for both NFTs
 		_notifyFeeCollectors(targetTokenId, int256(sourceData.amount));
 		_notifyFeeCollectors(sourceTokenId, -int256(sourceData.amount));
-
-		// Burn the source NFT and clear its data
-		nftContract.burn(sourceTokenId);
-		delete lockData[sourceTokenId];
 
 		emit TokensMerged(targetTokenId, sourceTokenId, newAmount);
 	}
@@ -386,14 +333,14 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 		if (address(unlockManager) == address(0)) revert UnlockManagerNotSet();
 
-		LockData storage data = lockData[tokenId];
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
 		uint256 availableAmount = data.amount - data.unlockingAmount;
 
 		if (amount > availableAmount) revert InsufficientLockedAmount();
 		if (amount == 0) revert ZeroAmount();
 
 		// Update the unlocking amount
-		data.unlockingAmount += amount;
+		nftContract.updateLockData(tokenId, data.amount, data.unlockingAmount + amount, data.name);
 
 		// Delegate to the unlock manager
 		unlockManager.initiateUnlock(tokenId, msg.sender, amount);
@@ -414,15 +361,13 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	function completeUnlock(uint256 tokenId, uint256 amount) external {
 		if (msg.sender != address(unlockManager)) revert UnauthorizedAccess(msg.sender, address(unlockManager));
 
-		LockData storage data = lockData[tokenId];
-		data.unlockingAmount -= amount;
-		data.amount -= amount;
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		nftContract.updateLockData(tokenId, data.amount - amount, data.unlockingAmount - amount, data.name);
 
 		// Burn the NFT if no locked tokens remain
-		if (data.amount == 0) {
-			nftContract.burn(tokenId);
-			delete lockData[tokenId];
-		}
+		if (data.amount == 0) nftContract.burn(tokenId);
+
+		emit UnlockCompleted(tokenId, msg.sender, amount);
 	}
 
 	/**
@@ -435,7 +380,8 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	function cancelUnlock(uint256 tokenId, uint256 amount) external {
 		if (msg.sender != address(unlockManager)) revert UnauthorizedAccess(msg.sender, address(unlockManager));
 
-		lockData[tokenId].unlockingAmount -= amount;
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		nftContract.updateLockData(tokenId, data.amount, data.unlockingAmount - amount, data.name);
 
 		// Notify fee collectors
 		_notifyFeeCollectors(tokenId, int256(amount));
@@ -448,19 +394,16 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param to        Address to mint the NFT to.
 	 * @param tokenId   Specific token ID to mint.
 	 * @param amount    Amount of SYMM tokens locked.
-	 * @param brandName Brand name for the NFT.
+	 * @param name      Brand name for the NFT.
 	 */
-	function syncMint(address to, uint256 tokenId, uint256 amount, string memory brandName) external onlyRole(SYNC_ROLE) whenNotPaused {
+	function syncMint(address to, uint256 tokenId, uint256 amount, string memory name) external onlyRole(SYNC_ROLE) whenNotPaused {
 		// Mint NFT with specific ID
-		nftContract.mintWithId(to, tokenId, brandName);
-
-		// Store lock data
-		lockData[tokenId] = LockData({ amount: amount, lockTimestamp: block.timestamp, unlockingAmount: 0 });
+		nftContract.mintWithId(to, tokenId, amount, name);
 
 		// Notify fee collectors
 		_notifyFeeCollectors(tokenId, int256(amount));
 
-		emit SyncMint(to, tokenId, amount, brandName);
+		emit SyncMint(to, tokenId, amount, name);
 	}
 
 	/**
@@ -468,43 +411,16 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param tokenIds  Array of token IDs to update.
 	 * @param lockDatas Array of lock data to apply.
 	 */
-	function batchUpdateLockData(uint256[] calldata tokenIds, LockData[] calldata lockDatas) external onlyRole(SYNC_ROLE) {
+	function batchUpdateLockData(uint256[] calldata tokenIds, ISymmioBuildersNft.LockData[] calldata lockDatas) external onlyRole(SYNC_ROLE) {
 		if (tokenIds.length != lockDatas.length) revert LengthMismatch();
 
 		for (uint256 i = 0; i < tokenIds.length; i++) {
-			uint256 oldAmount = lockData[tokenIds[i]].amount;
+			uint256 oldAmount = nftContract.getLockData(tokenIds[i]).amount;
 			uint256 newAmount = lockDatas[i].amount;
-			lockData[tokenIds[i]] = lockDatas[i];
+			nftContract.updateLockData(tokenIds[i], lockDatas[i].amount, lockDatas[i].unlockingAmount, lockDatas[i].name);
 
 			// Notify fee collectors of the change
 			_notifyFeeCollectors(tokenIds[i], int256(newAmount) - int256(oldAmount));
-		}
-	}
-
-	/* ───────────────────────── Transfer Controls ───────────────────────── */
-
-	/**
-	 * @notice Check if an NFT transfer is allowed.
-	 * @param tokenId ID of the NFT to check.
-	 * @return Whether the transfer is allowed.
-	 */
-	function isTransferAllowed(uint256 tokenId) external view returns (bool) {
-		return !transfersPaused && lockData[tokenId].unlockingAmount == 0;
-	}
-
-	/**
-	 * @notice Hook called before NFT transfers to check restrictions.
-	 * @param from    Address transferring from.
-	 * @param to      Address transferring to.
-	 * @param tokenId ID of the NFT being transferred.
-	 *
-	 * @dev Should be called by the NFT contract before transfers.
-	 */
-	function beforeTokenTransfer(address from, address to, uint256 tokenId) external view {
-		// Skip checks for minting (from == address(0)) and burning (to == address(0))
-		if (from != address(0) && to != address(0)) {
-			if (transfersPaused) revert TransfersPaused();
-			if (lockData[tokenId].unlockingAmount > 0) revert TokenHasActiveUnlock();
 		}
 	}
 
@@ -522,15 +438,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 */
 	function unpause() external onlyRole(UNPAUSER_ROLE) {
 		_unpause();
-	}
-
-	/**
-	 * @notice Set the pause state for NFT transfers.
-	 * @param _paused True to pause transfers, false to unpause.
-	 */
-	function setTransfersPaused(bool _paused) external onlyRole(TRANSFER_PAUSER_ROLE) {
-		transfersPaused = _paused;
-		emit TransfersPausedUpdated(_paused);
 	}
 
 	/* ────────────────────────── Admin Functions ────────────────────────── */
@@ -551,7 +458,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 */
 	function setUnlockManager(address _unlockManager) external onlyRole(SETTER_ROLE) {
 		if (_unlockManager == address(0)) revert ZeroAddress();
-		unlockManager = ISymmUnlockManager(_unlockManager);
+		unlockManager = ISymmBuildersNftUnlockManager(_unlockManager);
 		emit UnlockManagerUpdated(_unlockManager);
 	}
 
@@ -585,41 +492,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	}
 
 	/* ────────────────────────── View Functions ────────────────────────── */
-
-	/**
-	 * @notice Get the effective locked amount for an NFT (excluding unlocking amounts).
-	 * @param tokenId ID of the NFT.
-	 * @return The effective locked amount available for fee reductions.
-	 */
-	function getEffectiveLockedAmount(uint256 tokenId) external view returns (uint256) {
-		LockData storage data = lockData[tokenId];
-		return data.amount - data.unlockingAmount;
-	}
-
-	/**
-	 * @notice Get lock data for multiple NFTs in a single call.
-	 * @param tokenIds Array of token IDs to query.
-	 * @return Array of LockData structs.
-	 */
-	function getLockDataBatch(uint256[] calldata tokenIds) external view returns (LockData[] memory) {
-		LockData[] memory result = new LockData[](tokenIds.length);
-		for (uint256 i = 0; i < tokenIds.length; i++) {
-			result[i] = lockData[tokenIds[i]];
-		}
-		return result;
-	}
-
-	/**
-	 * @notice Get the total effective locked amount for a user across all their NFTs.
-	 * @param user Address of the user.
-	 * @return total Total effective locked amount for fee reduction calculations.
-	 */
-	function getUserTotalLocked(address user) external view returns (uint256 total) {
-		// This would need to iterate through user's NFTs from the NFT contract
-		// Implementation depends on how the NFT contract exposes user's tokens
-		// For now, returning 0 as placeholder
-		return 0;
-	}
 
 	/**
 	 * @notice Get all fee collectors for a specific NFT.

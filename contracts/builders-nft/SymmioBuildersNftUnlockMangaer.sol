@@ -26,50 +26,15 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+
+import "./interfaces/ISymmioBuildersNft.sol";
+import "./interfaces/ISymmioBuildersNftManager.sol";
 
 /* ────────────────────────── External Interfaces ────────────────────────── */
-
-/**
- * @notice Interface for the SymmioBuildersNFT contract to query ownership and lock data.
- */
-interface ISymmioBuildersNftManager {
-	/**
-	 * @notice Get the owner of a specific NFT.
-	 * @param tokenId ID of the NFT to query.
-	 * @return Address of the NFT owner.
-	 */
-	function ownerOf(uint256 tokenId) external view returns (address);
-
-	/**
-	 * @notice Get the lock data for a specific NFT.
-	 * @param tokenId ID of the NFT to query.
-	 * @return amount          Amount of tokens locked.
-	 * @return lockTimestamp   Timestamp when tokens were locked.
-	 * @return brandName       Brand name associated with the NFT.
-	 * @return unlockingAmount Amount currently being unlocked.
-	 */
-	function lockData(
-		uint256 tokenId
-	) external view returns (uint256 amount, uint256 lockTimestamp, string memory brandName, uint256 unlockingAmount);
-
-	/**
-	 * @notice Complete the unlock process for an NFT.
-	 * @param tokenId ID of the NFT to unlock.
-	 * @param amount  Amount of tokens to unlock.
-	 */
-	function completeUnlock(uint256 tokenId, uint256 amount) external;
-
-	/**
-	 * @notice Cancel an unlock process for an NFT.
-	 * @param tokenId ID of the NFT to cancel unlock for.
-	 * @param amount  Amount to cancel from the unlock process.
-	 */
-	function cancelUnlock(uint256 tokenId, uint256 amount) external;
-}
 
 /**
  * @notice Interface for the Vesting contract to set up vesting plans.
@@ -336,9 +301,9 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		if (request.amount == 0) {
 			revert UnlockNotFound();
 		}
-		if (symmBuildersNftManager.ownerOf(request.tokenId) != msg.sender) {
-			revert NotNFTOwner();
-		}
+		// if (symmBuildersNftManager.ownerOf(request.tokenId) != msg.sender) {
+		// 	revert NotNFTOwner();
+		// }
 		if (request.cliffPassed) {
 			revert CliffNotPassed();
 		}
@@ -378,9 +343,9 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		if (request.amount == 0) {
 			revert UnlockNotFound();
 		}
-		if (symmBuildersNftManager.ownerOf(request.tokenId) != msg.sender) {
-			revert NotNFTOwner();
-		}
+		// if (symmBuildersNftManager.ownerOf(request.tokenId) != msg.sender) {
+		// 	revert NotNFTOwner();
+		// }
 		if (request.vestingStarted) {
 			revert VestingAlreadyStarted();
 		}
