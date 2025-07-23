@@ -2,26 +2,22 @@
 pragma solidity ^0.8.27;
 
 /**
- * @title  SymmioBuildersNftUpgradeable
- * @notice Upgradeable version of the advanced ERC721 NFT contract for locking SYMM tokens on the Base chain to enable
+ * @title  SymmioBuildersNft
+ * @notice An advanced ERC721 NFT contract for locking SYMM tokens on the Base chain to enable
  *         fee reductions across multiple chains. Each NFT represents a locked amount of SYMM
  *         tokens with customizable branding and comprehensive unlock management capabilities.
  *
  * @dev    Core features include:
  *         • SYMM token locking with minimum amount requirements and token burning
- *         • NFT minting with associated brand names and lock data storage
+ *         • NFT minting with associated builder names and lock data storage
  *         • NFT merging functionality to consolidate locked amounts
  *         • Partial unlock processes via external unlock manager integration
  *         • Cross-chain synchronization for lock data consistency
  *         • Fee collector integration for automatic fee reduction calculations
- *         • Granular pause controls for transfers and contract operations
- *         • Role-based access control for administrative and sync functions
- *         • Comprehensive view functions for user and system queries
- *         • TransparentUpgradeableProxy pattern for secure upgrades
  *
  *         Integration points include external unlock manager for time-locked releases,
  *         fee collector contracts for cross-chain fee reduction tracking, and sync
- *         mechanisms for maintaining consistency across multiple blockchain networks.
+ *         mechanisms for maintaining consistency across multiple networks.
  */
 
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
@@ -71,7 +67,7 @@ interface ISymmFeeCollector {
 	function onLockedAmountChanged(int256 amount) external;
 }
 
-contract SymmioBuildersNftUpgradeable is
+contract SymmioBuildersNft is
 	Initializable,
 	ERC721EnumerableUpgradeable,
 	AccessControlEnumerableUpgradeable,
