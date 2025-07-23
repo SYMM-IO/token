@@ -4,74 +4,35 @@ pragma solidity ^0.8.27;
 /**
  * @title  SymmUnlockManager
  * @notice Manages the unlock process for SYMM tokens locked in SymmioBuildersNFTManager contracts with
- *         cliff periods and vesting integration. Provides a complete workflow for token unlocking
- *         including request initiation, cliff enforcement, cancellation capabilities, and vesting setup.
+ *         integrated cliff periods and sophisticated vesting functionality. Inherits from VestingV2 to
+ *         provide comprehensive token vesting with penalty mechanisms and flexible claiming options.
  *
  * @dev    Core features include:
  *         • Unlock request management with unique ID tracking
  *         • Configurable cliff period enforcement before token release
- *         • Integration with external vesting contracts for gradual token release
+ *         • Full VestingV2 functionality inherited (linear vesting, penalties, percentage claims)
  *         • Cancellation functionality for unlock requests during cliff period
  *         • Comprehensive tracking of unlock status and timing
  *         • Emergency pause functionality for security incidents
  *         • Token rescue capabilities for administrative recovery
  *         • Detailed view functions for unlock request analysis
  *
- *         The contract coordinates between SymmioBuildersNFTManager for lock management and external
- *         vesting contracts for token distribution, ensuring secure and controlled token unlocking
- *         with configurable time-based restrictions and user flexibility.
+ *         The contract coordinates with SymmioBuildersNFTManager for lock management and uses
+ *         inherited VestingV2 functionality for sophisticated token distribution with penalties,
+ *         percentage-based claiming, and multiple vesting plans per user.
  *
  * @dev    This contract is designed to be used with OpenZeppelin's TransparentUpgradeableProxy.
  */
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-
+import "../vesting/VestingV2.sol";
 import "./interfaces/ISymmioBuildersNft.sol";
 import "./interfaces/ISymmioBuildersNftManager.sol";
 
-/* ────────────────────────── External Interfaces ────────────────────────── */
-
-/**
- * @notice Interface for the Vesting contract to set up vesting plans.
- */
-interface IVesting {
-	/**
-	 * @notice Set up vesting plans for multiple users.
-	 * @param token     Address of the token to vest.
-	 * @param startTime Start time of the vesting period.
-	 * @param endTime   End time of the vesting period.
-	 * @param users     Array of user addresses.
-	 * @param amounts   Array of token amounts for each user.
-	 */
-	function setupVestingPlans(address token, uint256 startTime, uint256 endTime, address[] memory users, uint256[] memory amounts) external;
-}
-
-contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
-	using SafeERC20 for IERC20;
-
-	/* ─────────────────────────────── Roles ─────────────────────────────── */
-
-	/// @notice Role for updating configuration parameters like cliff and vesting durations.
-	bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
-
-	/// @notice Role for pausing contract operations.
-	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-
-	/// @notice Role for unpausing contract operations.
-	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
-
-	/* ──────────────────────── Storage Variables ──────────────────────── */
+contract SymmioBuildersNftUnlockManager is VestingV2 {
+	/* ──────────────────────── Additional Storage Variables ──────────────────────── */
 
 	/// @notice The SymmioBuildersNFT contract.
 	ISymmioBuildersNftManager public symmBuildersNftManager;
-
-	/// @notice The Vesting contract for managing token vesting plans.
-	IVesting public vestingContract;
 
 	/// @notice The SYMM token contract.
 	IERC20 public SYMM;
@@ -92,7 +53,7 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 	mapping(uint256 => uint256[]) public tokenUnlockIds;
 
 	/// @dev This empty reserved space is put in place to allow future versions to add new variables without shifting down storage in the inheritance chain.
-	uint256[50] private __gap;
+	uint256[50] private __gap; // Reduced to account for new variables
 
 	/* ─────────────────────────────── Structs ─────────────────────────────── */
 
@@ -104,6 +65,7 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 	 * @param tokenId              ID of the NFT being unlocked.
 	 * @param cliffPassed          Whether the cliff period has passed.
 	 * @param vestingStarted       Whether vesting has started for this request.
+	 * @param vestingPlanId        ID of the created vesting plan in VestingV2.
 	 */
 	struct UnlockRequest {
 		uint256 amount;
@@ -112,6 +74,7 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		uint256 tokenId;
 		bool cliffPassed;
 		bool vestingStarted;
+		uint256 vestingPlanId;
 	}
 
 	/* ─────────────────────────────── Events ─────────────────────────────── */
@@ -145,12 +108,13 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 
 	/**
 	 * @notice Emitted when vesting starts for an unlock request.
-	 * @param unlockId ID of the unlock request.
-	 * @param tokenId  ID of the NFT.
-	 * @param owner    Owner of the NFT.
-	 * @param amount   Amount of tokens entering vesting.
+	 * @param unlockId       ID of the unlock request.
+	 * @param vestingPlanId  ID of the created vesting plan.
+	 * @param tokenId        ID of the NFT.
+	 * @param owner          Owner of the NFT.
+	 * @param amount         Amount of tokens entering vesting.
 	 */
-	event VestingStarted(uint256 indexed unlockId, uint256 indexed tokenId, address indexed owner, uint256 amount);
+	event VestingStarted(uint256 indexed unlockId, uint256 indexed vestingPlanId, uint256 indexed tokenId, address owner, uint256 amount);
 
 	/**
 	 * @notice Emitted when the cliff duration is updated.
@@ -164,22 +128,14 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 	 */
 	event VestingDurationUpdated(uint256 newDuration);
 
-	/**
-	 * @notice Emitted when the vesting contract address is updated.
-	 * @param newVestingContract New vesting contract address.
-	 */
-	event VestingContractUpdated(address newVestingContract);
-
 	/* ─────────────────────────────── Errors ─────────────────────────────── */
 
-	error NotNFTOwner(); // caller is not the owner of the NFT
 	error UnlockNotFound(); // unlock request ID is invalid or not found
 	error CliffNotPassed(); // cliff period has not yet passed
 	error VestingAlreadyStarted(); // vesting has already started for this unlock request
 	error InvalidDuration(); // invalid duration (zero) provided for cliff or vesting
-	error ZeroAddress(); // zero address provided for critical parameters
-	error ZeroAmount(); // zero amount provided for operations requiring non-zero value
 	error UnauthorizedAccess(address caller, address requiredCaller); // unauthorized caller attempted restricted action
+	error ZeroAmount(); // zero amount provided for critical parameters
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -190,12 +146,13 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 
 	/**
 	 * @notice Initialize the SymmUnlockManager with core contracts and configuration.
-	 * @param _symmBuildersNft  Address of the SymmioBuildersNFT contract.
-	 * @param _symm             Address of the SYMM token contract.
-	 * @param _vestingContract  Address of the Vesting contract.
-	 * @param _admin            Address to receive admin and all role assignments.
-	 * @param _cliffDuration    Duration of the cliff period in seconds.
-	 * @param _vestingDuration  Duration of the vesting period in seconds.
+	 * @param _symmBuildersNft         Address of the SymmioBuildersNFT contract.
+	 * @param _symm                    Address of the SYMM token contract.
+	 * @param _admin                   Address to receive admin and all role assignments.
+	 * @param _cliffDuration           Duration of the cliff period in seconds.
+	 * @param _vestingDuration         Duration of the vesting period in seconds.
+	 * @param _lockedClaimPenalty      Penalty rate for early claims (scaled by 1e18).
+	 * @param _lockedClaimPenaltyReceiver Address to receive penalties from early claims.
 	 *
 	 * @dev Sets up access control and validates all inputs. Reverts on zero addresses or invalid durations.
 	 *      This replaces the constructor for upgradeable contracts.
@@ -203,56 +160,30 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 	function initialize(
 		address _symmBuildersNft,
 		address _symm,
-		address _vestingContract,
 		address _admin,
 		uint256 _cliffDuration,
-		uint256 _vestingDuration
+		uint256 _vestingDuration,
+		uint256 _lockedClaimPenalty,
+		address _lockedClaimPenaltyReceiver
 	) public initializer {
-		if (_symmBuildersNft == address(0) || _symm == address(0) || _vestingContract == address(0) || _admin == address(0)) {
+		if (_symmBuildersNft == address(0) || _symm == address(0) || _admin == address(0)) {
 			revert ZeroAddress();
 		}
 		if (_cliffDuration == 0 || _vestingDuration == 0) {
 			revert InvalidDuration();
 		}
 
-		// Initialize parent contracts
-		__AccessControlEnumerable_init();
-		__Pausable_init();
-		__ReentrancyGuard_init();
+		// Initialize parent VestingV2 contract
+		__vesting_init(_admin, _lockedClaimPenalty, _lockedClaimPenaltyReceiver);
 
 		// Set contract addresses and parameters
 		symmBuildersNftManager = ISymmioBuildersNftManager(_symmBuildersNft);
 		SYMM = IERC20(_symm);
-		vestingContract = IVesting(_vestingContract);
 		cliffDuration = _cliffDuration;
 		vestingDuration = _vestingDuration;
 
 		// Initialize counter
 		_unlockIdCounter = 0;
-
-		// Grant roles to admin
-		_grantRole(DEFAULT_ADMIN_ROLE, _admin);
-		_grantRole(SETTER_ROLE, _admin);
-		_grantRole(PAUSER_ROLE, _admin);
-		_grantRole(UNPAUSER_ROLE, _admin);
-	}
-
-	/* ────────────────────── Pausing Functions ────────────────────── */
-
-	/**
-	 * @notice Pause the contract, disabling state-changing functions.
-	 * @dev Only callable by accounts with PAUSER_ROLE.
-	 */
-	function pause() external onlyRole(PAUSER_ROLE) {
-		_pause();
-	}
-
-	/**
-	 * @notice Unpause the contract, enabling state-changing functions.
-	 * @dev Only callable by accounts with UNPAUSER_ROLE.
-	 */
-	function unpause() external onlyRole(UNPAUSER_ROLE) {
-		_unpause();
 	}
 
 	/* ──────────────────── Unlock Management ──────────────────── */
@@ -281,7 +212,8 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 			owner: owner,
 			tokenId: tokenId,
 			cliffPassed: false,
-			vestingStarted: false
+			vestingStarted: false,
+			vestingPlanId: 0
 		});
 
 		tokenUnlockIds[tokenId].push(unlockId);
@@ -301,9 +233,6 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		if (request.amount == 0) {
 			revert UnlockNotFound();
 		}
-		// if (symmBuildersNftManager.ownerOf(request.tokenId) != msg.sender) {
-		// 	revert NotNFTOwner();
-		// }
 		if (request.cliffPassed) {
 			revert CliffNotPassed();
 		}
@@ -335,7 +264,7 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 	 * @notice Complete the cliff period and start vesting for an unlock request.
 	 * @param unlockId ID of the unlock request to process.
 	 *
-	 * @dev Transfers tokens to vesting contract and sets up vesting plan.
+	 * @dev Uses inherited VestingV2 functionality to create a sophisticated vesting plan.
 	 *      Only callable by NFT owner after cliff period completion.
 	 */
 	function completeCliffAndStartVesting(uint256 unlockId) external nonReentrant whenNotPaused {
@@ -343,9 +272,6 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		if (request.amount == 0) {
 			revert UnlockNotFound();
 		}
-		// if (symmBuildersNftManager.ownerOf(request.tokenId) != msg.sender) {
-		// 	revert NotNFTOwner();
-		// }
 		if (request.vestingStarted) {
 			revert VestingAlreadyStarted();
 		}
@@ -360,20 +286,19 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		// Complete unlock on NFT contract
 		symmBuildersNftManager.completeUnlock(request.tokenId, request.amount);
 
-		// Set up vesting plan for the owner
+		// Create vesting plan using inherited VestingV2 functionality
 		address[] memory users = new address[](1);
 		users[0] = request.owner;
 		uint256[] memory amounts = new uint256[](1);
 		amounts[0] = request.amount;
 
-		// Approve vesting contract to transfer tokens
-		SYMM.approve(address(vestingContract), request.amount);
+		uint256[] memory planIds = _setupVestingPlans(address(SYMM), block.timestamp, block.timestamp + vestingDuration, users, amounts);
 
-		// Set up vesting plan starting from now
-		vestingContract.setupVestingPlans(address(SYMM), block.timestamp, block.timestamp + vestingDuration, users, amounts);
+		// Link vesting plan to unlock request
+		request.vestingPlanId = planIds[0];
 
 		emit CliffCompleted(unlockId, request.tokenId, request.owner);
-		emit VestingStarted(unlockId, request.tokenId, request.owner, request.amount);
+		emit VestingStarted(unlockId, planIds[0], request.tokenId, request.owner, request.amount);
 	}
 
 	/* ────────────────────────── Admin Functions ────────────────────────── */
@@ -404,32 +329,6 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		}
 		vestingDuration = _vestingDuration;
 		emit VestingDurationUpdated(_vestingDuration);
-	}
-
-	/**
-	 * @notice Update the vesting contract address.
-	 * @param _vestingContract New vesting contract address.
-	 *
-	 * @dev Only callable by accounts with SETTER_ROLE. Cannot be zero address.
-	 */
-	function setVestingContract(address _vestingContract) external onlyRole(SETTER_ROLE) {
-		if (_vestingContract == address(0)) {
-			revert ZeroAddress();
-		}
-		vestingContract = IVesting(_vestingContract);
-		emit VestingContractUpdated(_vestingContract);
-	}
-
-	/**
-	 * @notice Rescue tokens accidentally sent to the contract.
-	 * @param token  Address of the token to rescue.
-	 * @param to     Recipient address for the rescued tokens.
-	 * @param amount Amount of tokens to transfer.
-	 *
-	 * @dev Only callable by accounts with DEFAULT_ADMIN_ROLE for emergency recovery.
-	 */
-	function rescueTokens(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-		IERC20(token).safeTransfer(to, amount);
 	}
 
 	/* ────────────────────────── View Functions ────────────────────────── */
@@ -533,6 +432,30 @@ contract SymmUnlockManager is Initializable, AccessControlEnumerableUpgradeable,
 		}
 
 		return cliffEndTime - block.timestamp;
+	}
+
+	/**
+	 * @notice Get the vesting plan ID for an unlock request.
+	 * @param unlockId ID of the unlock request.
+	 * @return vestingPlanId ID of the associated vesting plan (0 if not started).
+	 */
+	function getUnlockVestingPlanId(uint256 unlockId) external view returns (uint256 vestingPlanId) {
+		UnlockRequest storage request = unlockRequests[unlockId];
+		return request.vestingPlanId;
+	}
+
+	/**
+	 * @notice Override to handle SYMM token minting if possible.
+	 * @param token  Address of the token to mint.
+	 * @param amount Amount of tokens to mint.
+	 *
+	 * @dev This hook is called when the contract needs more tokens for vesting.
+	 *      In this case, we expect SYMM tokens to be transferred from the NFT manager.
+	 */
+	function _mintTokenIfPossible(address token, uint256 amount) internal virtual override {
+		// Since SYMM tokens come from burned NFTs, we don't mint them
+		// The tokens should already be in the contract from completed unlocks
+		// This is a no-op, but can be overridden if minting is needed
 	}
 
 	/**

@@ -26,7 +26,7 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 
 import "./interfaces/ISymmioBuildersNft.sol";
-import "./interfaces/ISymmBuildersNftUnlockManager.sol";
+import "./interfaces/ISymmioBuildersNftUnlockManager.sol";
 import "./interfaces/ISymmioBuildersNftManager.sol";
 
 /* ────────────────────────── External Interfaces ────────────────────────── */
@@ -72,7 +72,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	ISymmioBuildersNft public nftContract;
 
 	/// @notice The unlock manager contract for handling token unlock processes.
-	ISymmBuildersNftUnlockManager public unlockManager;
+	ISymmioBuildersNftUnlockManager public unlockManager;
 
 	/// @notice The minimum amount of SYMM tokens required to mint an NFT.
 	uint256 public minLockAmount;
@@ -458,7 +458,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 */
 	function setUnlockManager(address _unlockManager) external onlyRole(SETTER_ROLE) {
 		if (_unlockManager == address(0)) revert ZeroAddress();
-		unlockManager = ISymmBuildersNftUnlockManager(_unlockManager);
+		unlockManager = ISymmioBuildersNftUnlockManager(_unlockManager);
 		emit UnlockManagerUpdated(_unlockManager);
 	}
 
