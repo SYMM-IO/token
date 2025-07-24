@@ -241,6 +241,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	error NotTokenOwner();
 	error InsufficientLockedAmount();
 	error InvalidTokenId();
+	error InvalidMerge();
 	error ZeroAmount();
 	error TokenHasActiveUnlock();
 	error UnauthorizedAccess(address caller, address requiredCaller);
@@ -293,9 +294,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		cliffDuration = _cliffDuration;
 		vestingDuration = _vestingDuration;
 
-		// Initialize counter
-		_unlockIdCounter = 0;
-
 		// Grant additional roles to the admin for initial setup
 		_grantRole(MINTER_ROLE, _admin);
 		_grantRole(SYNC_ROLE, _admin);
@@ -342,6 +340,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		string memory brandName
 	) external onlyRole(MINTER_ROLE) nonReentrant whenNotPaused returns (uint256 tokenId) {
 		if (amount < minLockAmount) revert AmountBelowMinimum(amount, minLockAmount);
+		if (to == address(0)) revert ZeroAddress();
 
 		// Mint new NFT
 		tokenId = nftContract.mint(to, amount, brandName);
@@ -383,6 +382,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	function merge(uint256 targetTokenId, uint256 sourceTokenId) external nonReentrant whenNotPaused {
 		if (nftContract.ownerOf(targetTokenId) != msg.sender) revert NotTokenOwner();
 		if (nftContract.ownerOf(sourceTokenId) != msg.sender) revert NotTokenOwner();
+		if (targetTokenId == sourceTokenId) revert InvalidMerge();
 
 		ISymmioBuildersNft.LockData memory targetData = nftContract.getLockData(targetTokenId);
 		ISymmioBuildersNft.LockData memory sourceData = nftContract.getLockData(sourceTokenId);
@@ -505,7 +505,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		nftContract.updateLockData(request.tokenId, data.amount - request.amount, data.unlockingAmount - request.amount, data.name);
 
 		// Burn the NFT if no locked tokens remain
-		if (data.amount - request.amount == 0) {
+		if (data.amount - request.amount == 0 && data.unlockingAmount == 0) {
 			nftContract.burn(request.tokenId);
 		}
 
@@ -535,6 +535,8 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param name      Brand name for the NFT.
 	 */
 	function syncMint(address to, uint256 tokenId, uint256 amount, string memory name) external onlyRole(SYNC_ROLE) whenNotPaused {
+		if (to == address(0)) revert ZeroAddress();
+		
 		// Mint NFT with specific ID
 		nftContract.mintWithId(to, tokenId, amount, name);
 
