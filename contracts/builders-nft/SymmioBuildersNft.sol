@@ -38,9 +38,6 @@ contract SymmioBuildersNft is
 	/// @notice Role for unpausing the contract operations.
 	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
-	/// @notice Role for pausing/unpausing NFT transfers specifically.
-	bytes32 public constant TRANSFER_PAUSER_ROLE = keccak256("TRANSFER_PAUSER_ROLE");
-
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
 	/// @notice Counter for generating unique token IDs sequentially.
@@ -254,14 +251,21 @@ contract SymmioBuildersNft is
 	}
 
 	/**
-	 * @notice Set the pause state for NFT transfers independently of contract pause.
-	 * @param _paused True to pause transfers, false to unpause.
-	 *
-	 * @dev Only callable by accounts with TRANSFER_PAUSER_ROLE.
+	 * @notice Pause the contract, disabling transfers.
+	 * @dev Only callable by accounts with PAUSER_ROLE.
 	 */
-	function setTransfersPaused(bool _paused) external onlyRole(TRANSFER_PAUSER_ROLE) {
-		transfersPaused = _paused;
-		emit TransfersPausedUpdated(_paused);
+	function pauseTransfers() external onlyRole(PAUSER_ROLE) {
+		transfersPaused = true;
+		emit TransfersPausedUpdated(true);
+	}
+
+	/**
+	 * @notice Unpause the contract, enabling transfers.
+	 * @dev Only callable by accounts with UNPAUSER_ROLE.
+	 */
+	function unpauseTransfers() external onlyRole(UNPAUSER_ROLE) {
+		transfersPaused = false;
+		emit TransfersPausedUpdated(false);
 	}
 
 	/* ───────────────────────── Internal Overrides ───────────────────────── */
