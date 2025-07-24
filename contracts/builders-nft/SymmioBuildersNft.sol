@@ -132,25 +132,6 @@ contract SymmioBuildersNft is
 	}
 
 	/**
-	 * @notice Mint a specific NFT ID with a brand name (used for cross-chain sync).
-	 * @param to        Address to mint the NFT to.
-	 * @param tokenId   Specific token ID to mint.
-	 * @param amount    Amount of SYMM tokens to lock.
-	 * @param name      Name for the NFT.
-	 *
-	 * @dev Only callable by addresses with MINTER_ROLE. Updates counter to avoid conflicts.
-	 */
-	function mintWithId(address to, uint256 tokenId, uint256 amount, string memory name) external onlyRole(MINTER_ROLE) whenNotPaused {
-		// Update token ID counter to avoid conflicts
-		if (tokenId >= _tokenIdCounter) _tokenIdCounter = tokenId + 1;
-
-		_safeMint(to, tokenId);
-		lockData[tokenId] = ISymmioBuildersNft.LockData({ amount: amount, lockTimestamp: block.timestamp, unlockingAmount: 0, name: name });
-
-		emit NFTMinted(to, tokenId, amount, name);
-	}
-
-	/**
 	 * @notice Burn an NFT.
 	 * @param tokenId ID of the NFT to burn.
 	 *

@@ -210,15 +210,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	event VestingDurationUpdated(uint256 newDuration);
 
 	/**
-	 * @notice Emitted when an NFT is minted for cross-chain synchronization.
-	 * @param to        Address receiving the NFT.
-	 * @param tokenId   ID of the minted NFT.
-	 * @param amount    Amount of SYMM tokens locked.
-	 * @param brandName Brand name associated with the NFT.
-	 */
-	event SyncMint(address indexed to, uint256 indexed tokenId, uint256 amount, string brandName);
-
-	/**
 	 * @notice Emitted when fee collectors are added to an NFT.
 	 * @param tokenId      ID of the NFT.
 	 * @param feeCollector Address of the fee collector added.
@@ -523,25 +514,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	}
 
 	/* ───────────────────── Cross-Chain Sync Functions ───────────────────── */
-
-	/**
-	 * @notice Mint an NFT without token transfer for cross-chain synchronization.
-	 * @param to        Address to mint the NFT to.
-	 * @param tokenId   Specific token ID to mint.
-	 * @param amount    Amount of SYMM tokens locked.
-	 * @param name      Brand name for the NFT.
-	 */
-	function syncMint(address to, uint256 tokenId, uint256 amount, string memory name) external onlyRole(SYNC_ROLE) whenNotPaused {
-		if (to == address(0)) revert ZeroAddress();
-		
-		// Mint NFT with specific ID
-		nftContract.mintWithId(to, tokenId, amount, name);
-
-		// Notify fee collectors
-		_notifyFeeCollectors(tokenId, int256(amount));
-
-		emit SyncMint(to, tokenId, amount, name);
-	}
 
 	/**
 	 * @notice Update lock data for multiple NFTs for cross-chain synchronization.

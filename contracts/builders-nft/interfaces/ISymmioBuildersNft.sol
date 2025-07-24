@@ -19,8 +19,6 @@ interface ISymmioBuildersNft is IERC721 {
 
 	function mint(address to, uint256 amount, string memory name) external returns (uint256 tokenId);
 
-	function mintWithId(address to, uint256 tokenId, uint256 amount, string memory name) external;
-
 	function burn(uint256 tokenId) external;
 
 	function getLockData(uint256 tokenId) external view returns (LockData memory);

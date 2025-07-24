@@ -10,7 +10,7 @@ import "solidity-coverage"
 import "./tasks"
 dotenv.config()
 
-const accounts_list: any = [process.env.ACCOUNT]
+const accounts_list: any = [process.env.ACCOUNT || "0xec81e00837948239d5927bcb2b785675552bc92f1d2607ee91c540ddb56d6796"] // Dummy private key
 
 export const config: HardhatUserConfig = {
 	defaultNetwork: "hardhat",
@@ -43,17 +43,17 @@ export const config: HardhatUserConfig = {
 
 	networks: {
 		hardhat: {
-			forking: {
-				url: "https://1rpc.io/base",
-				blockNumber: 33113717,
-			},
+			// forking: {
+			// 	url: "https://1rpc.io/base",
+			// 	blockNumber: 33113717,
+			// },
 		},
 		ethereum: {
 			url: "https://ethereum.blockpi.network/v1/rpc/public",
 			accounts: accounts_list,
 		},
 		base: {
-			url: "https://mainnet.base.org",
+			url: "https://base.llamarpc.com",
 			accounts: accounts_list,
 		},
 		polygon: {
