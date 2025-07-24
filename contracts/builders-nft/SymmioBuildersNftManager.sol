@@ -58,9 +58,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	/// @notice Role for syncing cross-chain lock data and minting NFTs.
 	bytes32 public constant SYNC_ROLE = keccak256("SYNC_ROLE");
 
-	/// @notice Role for updating cliff and vesting durations.
-	bytes32 public constant DURATION_SETTER_ROLE = keccak256("DURATION_SETTER_ROLE");
-
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
 	/// @notice The SYMM token contract address (burnable and mintable).
@@ -284,7 +281,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		if (_cliffDuration == 0 || _vestingDuration == 0) revert InvalidDuration();
 		if (_lockedClaimPenaltyReceiver == address(0)) revert ZeroAddress();
 
-		// Initialize parent VestingV2 contract
+		// Initialize parent Vesting contract
 		__vesting_init(_admin, _lockedClaimPenalty, _lockedClaimPenaltyReceiver);
 
 		// Set contract-specific state
@@ -296,8 +293,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 
 		// Grant additional roles to the admin for initial setup
 		_grantRole(MINTER_ROLE, _admin);
-		_grantRole(SYNC_ROLE, _admin);
-		_grantRole(DURATION_SETTER_ROLE, _admin);
+		_grantRole(SETTER_ROLE, _admin);
 	}
 
 	/* ────────────────────── Core NFT & Locking Functions ────────────────────── */
@@ -358,6 +354,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 */
 	function lock(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
 		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
+		if (amount == 0) revert ZeroAmount();
 
 		// Burn the SYMM tokens
 		SYMM.burnFrom(msg.sender, amount);
@@ -582,7 +579,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 *
 	 * @dev Only callable by accounts with DURATION_SETTER_ROLE. Must be non-zero.
 	 */
-	function setCliffDuration(uint256 _cliffDuration) external onlyRole(DURATION_SETTER_ROLE) {
+	function setCliffDuration(uint256 _cliffDuration) external onlyRole(SETTER_ROLE) {
 		if (_cliffDuration == 0) revert InvalidDuration();
 		cliffDuration = _cliffDuration;
 		emit CliffDurationUpdated(_cliffDuration);
@@ -594,7 +591,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 *
 	 * @dev Only callable by accounts with DURATION_SETTER_ROLE. Must be non-zero.
 	 */
-	function setVestingDuration(uint256 _vestingDuration) external onlyRole(DURATION_SETTER_ROLE) {
+	function setVestingDuration(uint256 _vestingDuration) external onlyRole(SETTER_ROLE) {
 		if (_vestingDuration == 0) revert InvalidDuration();
 		vestingDuration = _vestingDuration;
 		emit VestingDurationUpdated(_vestingDuration);
