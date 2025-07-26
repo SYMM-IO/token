@@ -589,50 +589,26 @@ contract SymmioBuildersNftManager is VestingV2 {
 	}
 
 	/**
-	 * @notice Get active unlock requests for a specific NFT.
+	 * @notice Get unlock requests for a specific NFT.
 	 * @param tokenId ID of the NFT to query.
-	 * @return Array of active UnlockRequest structs (excluding completed/vesting requests).
-	 *
-	 * @dev Filters out requests that have started vesting or been completed.
+	 * @param start  Start index.
+	 * @param end    End index.
+	 * @param size   Maximum number of requests to return.
+	 * @return Array of unlock requests.
 	 */
-	function getActiveUnlockRequests(uint256 tokenId) external view returns (UnlockRequest[] memory) {
+	function getUnlockedRequests(uint256 tokenId, uint256 start, uint256 end, uint256 size) external view returns (UnlockRequest[] memory) {
 		uint256[] memory unlockIds = tokenUnlockIds[tokenId];
-		uint256 activeCount = 0;
+		uint256 total = unlockIds.length;
 
-		// Count active requests (non-zero amount and not vesting)
-		for (uint256 i = 0; i < unlockIds.length; i++) {
-			if (unlockRequests[unlockIds[i]].amount > 0 && !unlockRequests[unlockIds[i]].vestingStarted) {
-				activeCount++;
-			}
-		}
+		if (end > total) end = total;
+		if (start > end) start = end;
 
-		// Populate active requests array
-		UnlockRequest[] memory activeRequests = new UnlockRequest[](activeCount);
-		uint256 index = 0;
-		for (uint256 i = 0; i < unlockIds.length; i++) {
-			UnlockRequest storage request = unlockRequests[unlockIds[i]];
-			if (request.amount > 0 && !request.vestingStarted) {
-				activeRequests[index++] = request;
-			}
-		}
+		uint256 count = end - start;
+		if (count > size) count = size;
 
-		return activeRequests;
-	}
-
-	/**
-	 * @notice Check if an NFT has any active unlock requests.
-	 * @param tokenId ID of the NFT to check.
-	 * @return Whether the NFT has active unlock requests.
-	 */
-	function isUnlocking(uint256 tokenId) external view returns (bool) {
-		uint256[] memory unlockIds = tokenUnlockIds[tokenId];
-		for (uint256 i = 0; i < unlockIds.length; i++) {
-			UnlockRequest storage request = unlockRequests[unlockIds[i]];
-			if (request.amount > 0 && !request.vestingStarted) {
-				return true;
-			}
-		}
-		return false;
+		UnlockRequest[] memory requests = new UnlockRequest[](count);
+		for (uint256 i = 0; i < count; i++) requests[i] = unlockRequests[unlockIds[start + i]];
+		return requests;
 	}
 
 	/**
@@ -641,11 +617,8 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @return Timestamp when the cliff period ends, or 0 if request is invalid.
 	 */
 	function getCliffEndTime(uint256 unlockId) external view returns (uint256) {
-		UnlockRequest storage request = unlockRequests[unlockId];
-		if (request.amount == 0) {
-			return 0;
-		}
-		return request.unlockInitiatedTime + cliffDuration;
+		if (unlockId >= _unlockIdCounter) revert UnlockNotFound();
+		return unlockRequests[unlockId].unlockInitiatedTime + cliffDuration;
 	}
 
 	/**
@@ -654,40 +627,8 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @return Whether the cliff period has passed.
 	 */
 	function isCliffPassed(uint256 unlockId) external view returns (bool) {
-		UnlockRequest storage request = unlockRequests[unlockId];
-		if (request.amount == 0) {
-			return false;
-		}
-		return block.timestamp >= request.unlockInitiatedTime + cliffDuration;
-	}
-
-	/**
-	 * @notice Get the time remaining in the cliff period for an unlock request.
-	 * @param unlockId ID of the unlock request.
-	 * @return Seconds remaining until cliff period ends, or 0 if passed/invalid.
-	 */
-	function getCliffTimeRemaining(uint256 unlockId) external view returns (uint256) {
-		UnlockRequest storage request = unlockRequests[unlockId];
-		if (request.amount == 0) {
-			return 0;
-		}
-
-		uint256 cliffEndTime = request.unlockInitiatedTime + cliffDuration;
-		if (block.timestamp >= cliffEndTime) {
-			return 0;
-		}
-
-		return cliffEndTime - block.timestamp;
-	}
-
-	/**
-	 * @notice Get the vesting plan ID for an unlock request.
-	 * @param unlockId ID of the unlock request.
-	 * @return vestingPlanId ID of the associated vesting plan (0 if not started).
-	 */
-	function getUnlockVestingPlanId(uint256 unlockId) external view returns (uint256 vestingPlanId) {
-		UnlockRequest storage request = unlockRequests[unlockId];
-		return request.vestingPlanId;
+		if (unlockId >= _unlockIdCounter) revert UnlockNotFound();
+		return block.timestamp >= unlockRequests[unlockId].unlockInitiatedTime + cliffDuration;
 	}
 
 	/* ───────────────────────── Internal Helpers ───────────────────────── */
