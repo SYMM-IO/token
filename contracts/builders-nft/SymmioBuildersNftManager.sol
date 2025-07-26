@@ -5,14 +5,14 @@ pragma solidity ^0.8.27;
  * @title  SymmioBuildersNftManager
  * @notice Comprehensive manager contract for SymmioBuildersNft that handles all complex logic
  *         including SYMM token locking, unlock processes with cliff and vesting, merging,
- *         fee collection, and cross-chain sync. Integrates full VestingV2 functionality.
+ *         fee collection, and cross-chain sync. Integrates full Vesting functionality.
  *
  * @dev    Core features include:
  *         • SYMM token locking with burning and without burning (for MINTER_ROLE)
  *         • Lock data management for all NFTs
  *         • NFT merging functionality
  *         • Time-locked unlock functionality with cliff periods
- *         • Full VestingV2 functionality (linear vesting, penalties, percentage claims)
+ *         • Full Vesting functionality (linear vesting, penalties, percentage claims)
  *         • Unlock request management with unique ID tracking
  *         • Fee collector management and notifications
  *         • Cross-chain synchronization capabilities
@@ -43,7 +43,7 @@ interface IERC20Mintable is IERC20 {
 /**
  * @notice Interface for the fee collector contract handling fee collection.
  */
-interface ISymmFeeCollector {
+interface ISymmioFeeCollector {
 	function onLockedAmountChanged(int256 amount) external;
 }
 
@@ -97,7 +97,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param tokenId              ID of the NFT being unlocked.
 	 * @param cliffPassed          Whether the cliff period has passed.
 	 * @param vestingStarted       Whether vesting has started for this request.
-	 * @param vestingPlanId        ID of the created vesting plan in VestingV2.
+	 * @param vestingPlanId        ID of the created vesting plan in Vesting.
 	 */
 	struct UnlockRequest {
 		uint256 amount;
@@ -267,10 +267,9 @@ contract SymmioBuildersNftManager is VestingV2 {
 		uint256 _lockedClaimPenalty,
 		address _lockedClaimPenaltyReceiver
 	) public initializer {
-		if (_symm == address(0) || _nftContract == address(0) || _admin == address(0)) revert ZeroAddress();
-		if (_minLockAmount == 0) revert ZeroAmount();
-		if (_cliffDuration == 0 || _vestingDuration == 0) revert InvalidDuration();
-		if (_lockedClaimPenaltyReceiver == address(0)) revert ZeroAddress();
+		if (_symm == address(0) || _nftContract == address(0) || _admin == address(0) || _lockedClaimPenaltyReceiver == address(0))
+			revert ZeroAddress();
+		if (_cliffDuration == 0 || _vestingDuration == 0 || _lockedClaimPenalty == 0) revert InvalidDuration();
 
 		// Initialize parent Vesting contract
 		__vesting_init(_admin, _lockedClaimPenalty, _lockedClaimPenaltyReceiver);
@@ -474,7 +473,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @notice Complete the cliff period and start vesting for an unlock request.
 	 * @param unlockId ID of the unlock request to process.
 	 *
-	 * @dev Uses inherited VestingV2 functionality to create a sophisticated vesting plan.
+	 * @dev Uses inherited Vesting functionality to create a sophisticated vesting plan.
 	 *      Only callable by NFT owner after cliff period completion.
 	 */
 	function completeCliffAndStartVesting(uint256 unlockId) external nonReentrant whenNotPaused {
@@ -497,7 +496,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 			nftContract.burn(request.tokenId);
 		}
 
-		// Create vesting plan using inherited VestingV2 functionality
+		// Create vesting plan using inherited Vesting functionality
 		address[] memory users = new address[](1);
 		users[0] = request.owner;
 		uint256[] memory amounts = new uint256[](1);
@@ -730,7 +729,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	function _notifyFeeCollectors(uint256 tokenId, int256 amount) private {
 		address[] storage collectors = tokenRelatedFeeCollectors[tokenId];
 		for (uint256 i = 0; i < collectors.length; i++) {
-			ISymmFeeCollector(collectors[i]).onLockedAmountChanged(amount);
+			ISymmioFeeCollector(collectors[i]).onLockedAmountChanged(amount);
 		}
 	}
 
