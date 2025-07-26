@@ -104,7 +104,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		uint256 unlockInitiatedTime;
 		address owner;
 		uint256 tokenId;
-		bool cliffPassed;
 		bool vestingStarted;
 		uint256 vestingPlanId;
 	}
@@ -166,30 +165,14 @@ contract SymmioBuildersNftManager is VestingV2 {
 	event UnlockCancelled(uint256 indexed unlockId, uint256 indexed tokenId, address indexed owner, uint256 amount);
 
 	/**
-	 * @notice Emitted when the cliff period for an unlock request is completed.
-	 * @param unlockId ID of the unlock request.
-	 * @param tokenId  ID of the NFT.
-	 * @param owner    Owner of the NFT.
-	 */
-	event CliffCompleted(uint256 indexed unlockId, uint256 indexed tokenId, address indexed owner);
-
-	/**
 	 * @notice Emitted when vesting starts for an unlock request.
 	 * @param unlockId       ID of the unlock request.
-	 * @param vestingPlanId  ID of the created vesting plan.
 	 * @param tokenId        ID of the NFT.
+	 * @param vestingPlanId  ID of the created vesting plan.
 	 * @param owner          Owner of the NFT.
 	 * @param amount         Amount of tokens entering vesting.
 	 */
-	event VestingStarted(uint256 indexed unlockId, uint256 indexed vestingPlanId, uint256 indexed tokenId, address owner, uint256 amount);
-
-	/**
-	 * @notice Emitted when an unlock process is completed for an NFT.
-	 * @param tokenId ID of the NFT.
-	 * @param owner   Owner of the NFT.
-	 * @param amount  Amount of tokens to unlock.
-	 */
-	event UnlockCompleted(uint256 indexed tokenId, address indexed owner, uint256 amount);
+	event VestingStarted(uint256 indexed unlockId, uint256 indexed tokenId, address owner, uint256 amount, uint256 vestingPlanId);
 
 	/**
 	 * @notice Emitted when the minimum lock amount is updated.
@@ -305,9 +288,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Mint new NFT
 		tokenId = nftContract.mint(msg.sender, amount, brandName);
 
-		// Notify fee collectors
-		_notifyFeeCollectors(tokenId, int256(amount));
-
 		emit NFTMinted(msg.sender, tokenId, amount, brandName);
 	}
 
@@ -331,9 +311,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Mint new NFT
 		tokenId = nftContract.mint(to, amount, brandName);
 
-		// Notify fee collectors
-		_notifyFeeCollectors(tokenId, int256(amount));
-
 		emit NFTMintedWithoutBurn(msg.sender, to, tokenId, amount, brandName);
 	}
 
@@ -343,7 +320,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param amount  Amount of SYMM tokens to lock.
 	 */
 	function lock(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
-		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 		if (amount == 0) revert ZeroAmount();
 
 		// Burn the SYMM tokens
@@ -367,8 +343,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param sourceTokenId ID of the NFT to merge from (will be burned).
 	 */
 	function merge(uint256 targetTokenId, uint256 sourceTokenId) external nonReentrant whenNotPaused {
-		if (nftContract.ownerOf(targetTokenId) != msg.sender) revert NotTokenOwner();
-		if (nftContract.ownerOf(sourceTokenId) != msg.sender) revert NotTokenOwner();
+		if (nftContract.ownerOf(targetTokenId) != msg.sender || nftContract.ownerOf(sourceTokenId) != msg.sender) revert NotTokenOwner();
 		if (targetTokenId == sourceTokenId) revert InvalidMerge();
 
 		ISymmioBuildersNft.LockData memory targetData = nftContract.getLockData(targetTokenId);
@@ -399,12 +374,12 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 */
 	function initiateUnlock(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
 		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
+		if (amount == 0) revert ZeroAmount();
 
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
 		uint256 availableAmount = data.amount - data.unlockingAmount;
 
 		if (amount > availableAmount) revert InsufficientLockedAmount();
-		if (amount == 0) revert ZeroAmount();
 
 		// Update the unlocking amount
 		nftContract.updateLockData(tokenId, data.amount, data.unlockingAmount + amount, data.name);
@@ -416,7 +391,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 			unlockInitiatedTime: block.timestamp,
 			owner: msg.sender,
 			tokenId: tokenId,
-			cliffPassed: false,
 			vestingStarted: false,
 			vestingPlanId: 0
 		});
@@ -440,7 +414,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		UnlockRequest storage request = unlockRequests[unlockId];
 		if (request.amount == 0) revert UnlockNotFound();
 		if (request.owner != msg.sender) revert NotTokenOwner();
-		if (request.cliffPassed) revert CliffNotPassed();
+		if (request.vestingStarted) revert VestingAlreadyStarted();
 
 		uint256 amount = request.amount;
 		uint256 tokenId = request.tokenId;
@@ -483,8 +457,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		if (request.vestingStarted) revert VestingAlreadyStarted();
 		if (block.timestamp < request.unlockInitiatedTime + cliffDuration) revert CliffNotPassed();
 
-		// Mark cliff as passed and vesting as started
-		request.cliffPassed = true;
+		// Mark vesting as started
 		request.vestingStarted = true;
 
 		// Complete unlock on NFT contract
@@ -507,9 +480,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Link vesting plan to unlock request
 		request.vestingPlanId = planIds[0];
 
-		emit CliffCompleted(unlockId, request.tokenId, request.owner);
-		emit VestingStarted(unlockId, planIds[0], request.tokenId, request.owner, request.amount);
-		emit UnlockCompleted(request.tokenId, request.owner, request.amount);
+		emit VestingStarted(unlockId, request.tokenId, request.owner, request.amount, planIds[0]);
 	}
 
 	/* ───────────────────── Cross-Chain Sync Functions ───────────────────── */
