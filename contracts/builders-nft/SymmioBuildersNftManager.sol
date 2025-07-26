@@ -349,18 +349,18 @@ contract SymmioBuildersNftManager is VestingV2 {
 		ISymmioBuildersNft.LockData memory targetData = nftContract.getLockData(targetTokenId);
 		ISymmioBuildersNft.LockData memory sourceData = nftContract.getLockData(sourceTokenId);
 
-		if (targetData.unlockingAmount > 0 || sourceData.unlockingAmount > 0) revert TokenHasActiveUnlock();
+		if (sourceData.unlockingAmount > 0) revert TokenHasActiveUnlock();
 
 		// Merge locked amounts
 		uint256 newAmount = targetData.amount + sourceData.amount;
 		nftContract.updateLockData(targetTokenId, newAmount, targetData.unlockingAmount, targetData.name);
 
-		// Burn the source NFT and clear its data
-		nftContract.burn(sourceTokenId);
-
 		// Notify fee collectors for both NFTs
 		_notifyFeeCollectors(targetTokenId, int256(sourceData.amount));
 		_notifyFeeCollectors(sourceTokenId, -int256(sourceData.amount));
+
+		// Burn the source NFT and clear its data
+		nftContract.burn(sourceTokenId);
 
 		emit TokensMerged(targetTokenId, sourceTokenId, newAmount);
 	}
@@ -460,14 +460,14 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Mark vesting as started
 		request.vestingStarted = true;
 
-		// Complete unlock on NFT contract
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(request.tokenId);
-		nftContract.updateLockData(request.tokenId, data.amount - request.amount, data.unlockingAmount - request.amount, data.name);
+		uint256 newUnlockingAmount = data.unlockingAmount - request.amount;
+
+		// Complete unlock on NFT contract
+		nftContract.updateLockData(request.tokenId, data.amount, newUnlockingAmount, data.name);
 
 		// Burn the NFT if no locked tokens remain
-		if (data.amount - request.amount == 0 && data.unlockingAmount == 0) {
-			nftContract.burn(request.tokenId);
-		}
+		if (data.amount == 0 && newUnlockingAmount == 0) nftContract.burn(request.tokenId);
 
 		// Create vesting plan using inherited Vesting functionality
 		address[] memory users = new address[](1);

@@ -83,6 +83,7 @@ contract SymmioBuildersNft is
 	error NotTokenOwner(); // caller is not the owner of the NFT
 	error ZeroAddress(); // zero address provided for critical parameters
 	error TransfersPaused(); // transfers are paused
+	error TokenHasActiveUnlock(); // token has an active unlock
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -265,6 +266,7 @@ contract SymmioBuildersNft is
 		// Only restrict actual transfers between addresses
 		if (from != address(0) && to != address(0)) {
 			if (transfersPaused) revert TransfersPaused();
+			if (lockData[tokenId].unlockingAmount > 0) revert TokenHasActiveUnlock();
 		}
 
 		return super._update(to, tokenId, auth);
