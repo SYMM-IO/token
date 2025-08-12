@@ -46,7 +46,7 @@ contract VestingUpsertManager is Initializable, AccessControlEnumerableUpgradeab
 				toSetupAmounts[setupCount] = newAmounts[i];
 				setupCount++;
 			} else {
-				uint256 locked = vesting.getLockedAmountsForToken(token, users[i]);
+				uint256 locked = vesting.getLockedAmountsForToken(users[i], token);
 				toReset[resetCount] = users[i];
 				toResetAmounts[resetCount] = locked + newAmounts[i];
 				resetCount++;
