@@ -5,6 +5,8 @@ import { shouldBehaveLikeSymmVesting } from "./symmVesting.behavior"
 import { ShouldBehaveLikeVesting } from "./vesting.behavior"
 import { shouldBehaveLikeSymmVestingPlanInitializer} from "./symmVestingPlanInitializer.behavior"
 import { ShouldBehaveLikeVestingV2 } from "./vestingV2.behavior";
+import { shouldBehaveLikeSymmioBuildersNft } from "./symmioBuildersNft.behavior";
+import { shouldBehaveLikeSymmioBuildersNftManager } from "./symmioBuildersNftManager.behavior";
 
 describe("Symmio Token", () => {
 	// if (process.env.TEST_MODE === "static") {
@@ -33,8 +35,16 @@ describe("Symmio Token", () => {
 			// 	shouldBehaveLikeSymmVestingPlanInitializer()
 			// })
 
-			describe("Vesting V2", async function () {
-				ShouldBehaveLikeVestingV2()
+			// describe("Vesting V2", async function () {
+			// 	ShouldBehaveLikeVestingV2()
+			// })
+
+			// describe("Symmio Builders Nft", async function () {
+			// 	shouldBehaveLikeSymmioBuildersNft()
+			// })
+
+			describe("Symmio Builders Nft Manager", async function () {
+				shouldBehaveLikeSymmioBuildersNftManager()
 			})
 		})
 	// } else if (process.env.TEST_MODE === "dynamic") {
