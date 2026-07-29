@@ -32,6 +32,12 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 		await symmioToken.connect(user1).approve(await symmioBuildersNftManager.getAddress(), mintAmount);
 	});
 
+	describe("SymmioBuildersNftManager - initialization", () => {
+		it("should use a 20% penalty scaled by 1e18", async () => {
+			expect(await symmioBuildersNftManager.lockedClaimPenalty()).to.equal(ethers.parseUnits("0.2", 18));
+		});
+	});
+
 	/* ---------------------------------------------------------------------- */
 	/*                    setPendingAmounts() tests                  */
 	/* ---------------------------------------------------------------------- */
@@ -154,7 +160,15 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await expect(symmioBuildersNftManager.connect(user1).lock(0, 0)).to.be.rejectedWith("ZeroAmount");
 		});
 
+		it("should revert if caller does not own the NFT", async () => {
+			await symmioBuildersNft.connect(admin).mint(await admin.getAddress(), mintAmount, brand);
+
+			await expect(symmioBuildersNftManager.connect(user1).lock(0, lockAmount))
+				.to.be.revertedWithCustomError(symmioBuildersNftManager, "NotTokenOwner");
+		});
+
 		it("should revert if not enough allowance", async () => {
+			await symmioBuildersNft.connect(admin).mint(await user1.getAddress(), mintAmount, brand);
 			await symmioToken.connect(user1).approve(await symmioBuildersNftManager.getAddress(), 0);
 			await expect(symmioBuildersNftManager.connect(user1).lock(0, lockAmount)).to.be.revertedWithCustomError(
 				symmioToken,
@@ -334,6 +348,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(request.vestingPlanId).to.equal(0);
 
 			const dataAfter = await symmioBuildersNft.getLockData(0);
+			expect(dataAfter.amount).to.equal(dataBefore.amount - request.amount);
 			expect(dataAfter.unlockingAmount).to.equal(dataBefore.unlockingAmount - request.amount);
 		});
 
@@ -384,38 +399,41 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			);
 		});
 
-		it("should burn NFT if all amounts = 0", async () => {
+		it("should burn NFT after a full unlock finishes vesting", async () => {
 			const unlockAmount = ethers.parseEther("100");
 
-			// Mint and lock
 			const tx1 = await symmioBuildersNftManager.connect(user1).mintAndLock(unlockAmount, "FullLock");
 			await tx1.wait();
 
 			const tokenId = 0;
 
-			// Initiate full unlock
 			const tx2 = await symmioBuildersNftManager.connect(user1).initiateUnlock(tokenId, unlockAmount);
 			await tx2.wait();
 
-			// Simulate that amount = 0 (manually call updateLockData)
-			await symmioBuildersNft.connect(admin).updateLockData(
-				tokenId,
-				0,                    // amount = 0
-				unlockAmount,         // unlockingAmount stays the same
-				"FullLock",
-			);
-
-			// Fast-forward past cliff
 			await time.increase(Number(await symmioBuildersNftManager.cliffDuration()) + 1);
 
-			// Complete vesting
 			await symmioBuildersNftManager.connect(user1).completeCliffAndStartVesting(0);
 
-			// NFT should be burned
 			await expect(symmioBuildersNft.ownerOf(tokenId)).to.be.revertedWithCustomError(
 				symmioBuildersNft,
 				"ERC721NonexistentToken",
 			);
+		});
+
+		it("should allow vesting claims after the manager mints payout tokens", async () => {
+			const unlockAmount = ethers.parseEther("100");
+
+			await symmioBuildersNftManager.connect(user1).mintAndLock(unlockAmount, "Claimable");
+			await symmioBuildersNftManager.connect(user1).initiateUnlock(0, unlockAmount);
+			await time.increase(Number(await symmioBuildersNftManager.cliffDuration()) + 1);
+			await symmioBuildersNftManager.connect(user1).completeCliffAndStartVesting(0);
+			await time.increase(Number(await symmioBuildersNftManager.vestingDuration()) + 1);
+
+			const balanceBefore = await symmioToken.balanceOf(user1.address);
+			await symmioBuildersNftManager.connect(user1).claimUnlockedToken(await symmioToken.getAddress(), 0);
+			const balanceAfter = await symmioToken.balanceOf(user1.address);
+
+			expect(balanceAfter - balanceBefore).to.equal(unlockAmount);
 		});
 	});
 
@@ -498,6 +516,27 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 				),
 			).to.be.revertedWithCustomError(symmioBuildersNftManager, "LengthMismatch");
 		});
+
+		it("should revert if synced lock data has unlockingAmount above amount", async () => {
+			await symmioBuildersNft.mint(await user1.getAddress(), ethers.parseEther("100"), "NFT1");
+
+			const SYNC_ROLE = await symmioBuildersNftManager.SYNC_ROLE();
+			await symmioBuildersNftManager.grantRole(SYNC_ROLE, user1.address);
+
+			await expect(
+				symmioBuildersNftManager.connect(user1).batchUpdateLockData(
+					[0],
+					[
+						{
+							amount: ethers.parseEther("100"),
+							unlockingAmount: ethers.parseEther("101"),
+							name: "Broken",
+							lockTimestamp: await time.latest(),
+						},
+					],
+				),
+			).to.be.revertedWithCustomError(symmioBuildersNft, "InvalidLockData");
+		});
 	});
 
 	describe("SymmioBuildersNftManager - Admin Functions", function() {
@@ -564,6 +603,22 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 				expect(collectors).to.include(feeCollector2);
 			});
 
+			it("should revert when adding a duplicate fee collector", async () => {
+				await symmioBuildersNftManager.addFeeCollector(tokenId, [feeCollector1]);
+
+				await expect(symmioBuildersNftManager.addFeeCollector(tokenId, [feeCollector1]))
+					.to.be.revertedWithCustomError(symmioBuildersNftManager, "FeeCollectorAlreadyAdded")
+					.withArgs(feeCollector1);
+			});
+
+			it("should revert when adding the zero address as fee collector", async () => {
+				await expect(
+					symmioBuildersNftManager.addFeeCollector(tokenId, ["0x0000000000000000000000000000000000000000"]),
+				)
+					.to.be.revertedWithCustomError(symmioBuildersNftManager, "InvalidFeeCollector")
+					.withArgs("0x0000000000000000000000000000000000000000");
+			});
+
 			it("should remove fee collector and emit event", async () => {
 				await symmioBuildersNftManager.addFeeCollector(tokenId, [feeCollector1]);
 				await expect(symmioBuildersNftManager.removeFeeCollector(tokenId, feeCollector1))
@@ -571,6 +626,12 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 
 				const collectors = await symmioBuildersNftManager.getTokenFeeCollectors(tokenId);
 				expect(collectors).to.not.include(feeCollector1);
+			});
+
+			it("should revert when removing a fee collector that is not registered", async () => {
+				await expect(symmioBuildersNftManager.removeFeeCollector(tokenId, feeCollector1))
+					.to.be.revertedWithCustomError(symmioBuildersNftManager, "FeeCollectorNotFound")
+					.withArgs(feeCollector1);
 			});
 		});
 
@@ -637,6 +698,16 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 				const cliffEnd = await symmioBuildersNftManager.getCliffEndTime(0);
 				expect(cliffEnd).to.equal(block!.timestamp + 1000);
 			});
+
+			it("should revert after the unlock request is cancelled", async () => {
+				await createUnlock(ethers.parseEther("100"));
+				await symmioBuildersNftManager.cancelUnlock(0);
+
+				await expect(symmioBuildersNftManager.getCliffEndTime(0)).to.be.revertedWithCustomError(
+					symmioBuildersNftManager,
+					"UnlockNotFound",
+				);
+			});
 		});
 
 		describe("isCliffPassed", function() {
@@ -658,6 +729,16 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 				await ethers.provider.send("evm_mine");
 
 				expect(await symmioBuildersNftManager.isCliffPassed(0)).to.equal(true);
+			});
+
+			it("should revert after the unlock request is cancelled", async () => {
+				await createUnlock(ethers.parseEther("100"));
+				await symmioBuildersNftManager.cancelUnlock(0);
+
+				await expect(symmioBuildersNftManager.isCliffPassed(0)).to.be.revertedWithCustomError(
+					symmioBuildersNftManager,
+					"UnlockNotFound",
+				);
 			});
 		});
 	});

@@ -84,6 +84,7 @@ contract SymmioBuildersNft is
 	error ZeroAddress(); // zero address provided for critical parameters
 	error TransfersPaused(); // transfers are paused
 	error TokenHasActiveUnlock(); // token has an active unlock
+	error InvalidLockData(); // invalid lock data for a token
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -152,6 +153,7 @@ contract SymmioBuildersNft is
 	 * @dev Only callable by the NFT owner.
 	 */
 	function updateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount, string memory name) external onlyRole(MINTER_ROLE) {
+		_validateLockData(tokenId, amount, unlockingAmount);
 		lockData[tokenId] = ISymmioBuildersNft.LockData({
 			amount: amount,
 			lockTimestamp: lockData[tokenId].lockTimestamp,
@@ -170,6 +172,7 @@ contract SymmioBuildersNft is
 	 * @return Lock data of the NFT.
 	 */
 	function getLockData(uint256 tokenId) external view returns (ISymmioBuildersNft.LockData memory) {
+		_requireOwned(tokenId);
 		return lockData[tokenId];
 	}
 
@@ -179,6 +182,7 @@ contract SymmioBuildersNft is
 	 * @return The effective locked amount available for fee reductions.
 	 */
 	function getEffectiveLockedAmount(uint256 tokenId) external view returns (uint256) {
+		_requireOwned(tokenId);
 		LockData storage data = lockData[tokenId];
 		return data.amount - data.unlockingAmount;
 	}
@@ -270,6 +274,11 @@ contract SymmioBuildersNft is
 		}
 
 		return super._update(to, tokenId, auth);
+	}
+
+	function _validateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount) internal view {
+		_requireOwned(tokenId);
+		if (unlockingAmount > amount) revert InvalidLockData();
 	}
 
 	/* ──────────────────── Interface Support ──────────────────── */

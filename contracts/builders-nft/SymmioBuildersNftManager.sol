@@ -221,6 +221,10 @@ contract SymmioBuildersNftManager is VestingV2 {
 	error CliffNotPassed();
 	error VestingAlreadyStarted();
 	error InvalidDuration();
+	error InvalidPenalty(uint256 penalty);
+	error InvalidFeeCollector(address feeCollector);
+	error FeeCollectorAlreadyAdded(address feeCollector);
+	error FeeCollectorNotFound(address feeCollector);
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -252,7 +256,8 @@ contract SymmioBuildersNftManager is VestingV2 {
 	) public initializer {
 		if (_symm == address(0) || _nftContract == address(0) || _admin == address(0) || _lockedClaimPenaltyReceiver == address(0))
 			revert ZeroAddress();
-		if (_cliffDuration == 0 || _vestingDuration == 0 || _lockedClaimPenalty == 0) revert InvalidDuration();
+		if (_cliffDuration == 0 || _vestingDuration == 0) revert InvalidDuration();
+		if (_lockedClaimPenalty > 1e18) revert InvalidPenalty(_lockedClaimPenalty);
 
 		// Initialize parent Vesting contract
 		__vesting_init(_admin, _lockedClaimPenalty, _lockedClaimPenaltyReceiver);
@@ -321,6 +326,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 */
 	function lock(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
 		if (amount == 0) revert ZeroAmount();
+		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 
 		// Burn the SYMM tokens
 		SYMM.burnFrom(msg.sender, amount);
@@ -461,13 +467,14 @@ contract SymmioBuildersNftManager is VestingV2 {
 		request.vestingStarted = true;
 
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(request.tokenId);
+		uint256 newAmount = data.amount - request.amount;
 		uint256 newUnlockingAmount = data.unlockingAmount - request.amount;
 
 		// Complete unlock on NFT contract
-		nftContract.updateLockData(request.tokenId, data.amount, newUnlockingAmount, data.name);
+		nftContract.updateLockData(request.tokenId, newAmount, newUnlockingAmount, data.name);
 
 		// Burn the NFT if no locked tokens remain
-		if (data.amount == 0 && newUnlockingAmount == 0) nftContract.burn(request.tokenId);
+		if (newAmount == 0 && newUnlockingAmount == 0) nftContract.burn(request.tokenId);
 
 		// Create vesting plan using inherited Vesting functionality
 		address[] memory users = new address[](1);
@@ -546,8 +553,16 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 */
 	function addFeeCollector(uint256 tokenId, address[] calldata feeCollectors) external onlyRole(SETTER_ROLE) {
 		for (uint256 i = 0; i < feeCollectors.length; i++) {
-			tokenRelatedFeeCollectors[tokenId].push(feeCollectors[i]);
-			emit FeeCollectorAdded(tokenId, feeCollectors[i]);
+			address feeCollector = feeCollectors[i];
+			if (feeCollector == address(0)) revert InvalidFeeCollector(feeCollector);
+
+			address[] storage collectors = tokenRelatedFeeCollectors[tokenId];
+			for (uint256 j = 0; j < collectors.length; j++) {
+				if (collectors[j] == feeCollector) revert FeeCollectorAlreadyAdded(feeCollector);
+			}
+
+			collectors.push(feeCollector);
+			emit FeeCollectorAdded(tokenId, feeCollector);
 		}
 	}
 
@@ -562,10 +577,11 @@ contract SymmioBuildersNftManager is VestingV2 {
 			if (collectors[i] == feeCollector) {
 				collectors[i] = collectors[collectors.length - 1];
 				collectors.pop();
-				break;
+				emit FeeCollectorRemoved(tokenId, feeCollector);
+				return;
 			}
 		}
-		emit FeeCollectorRemoved(tokenId, feeCollector);
+		revert FeeCollectorNotFound(feeCollector);
 	}
 
 	/* ────────────────────────── View Functions ────────────────────────── */
@@ -617,8 +633,9 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @return Timestamp when the cliff period ends, or 0 if request is invalid.
 	 */
 	function getCliffEndTime(uint256 unlockId) external view returns (uint256) {
-		if (unlockId >= _unlockIdCounter) revert UnlockNotFound();
-		return unlockRequests[unlockId].unlockInitiatedTime + cliffDuration;
+		UnlockRequest storage request = unlockRequests[unlockId];
+		if (unlockId >= _unlockIdCounter || request.amount == 0) revert UnlockNotFound();
+		return request.unlockInitiatedTime + cliffDuration;
 	}
 
 	/**
@@ -627,8 +644,9 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @return Whether the cliff period has passed.
 	 */
 	function isCliffPassed(uint256 unlockId) external view returns (bool) {
-		if (unlockId >= _unlockIdCounter) revert UnlockNotFound();
-		return block.timestamp >= unlockRequests[unlockId].unlockInitiatedTime + cliffDuration;
+		UnlockRequest storage request = unlockRequests[unlockId];
+		if (unlockId >= _unlockIdCounter || request.amount == 0) revert UnlockNotFound();
+		return block.timestamp >= request.unlockInitiatedTime + cliffDuration;
 	}
 
 	/* ───────────────────────── Internal Helpers ───────────────────────── */

@@ -17,7 +17,7 @@ task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager co
 			const minLockAmount = BigInt(100000000000000000000);
 			const cliffDuration = 10;
 			const vestingDuration = 3600;
-			const lockedClaimPenalty = 20;
+			const lockedClaimPenalty = ethers.parseUnits("0.2", 18);
 			const lockedClaimPenaltyReceiver = "0xBcd4042DE499D14e55001CcbB24a551F3b954096";
 
 			const symmioBuildersNftManager = await ethers.getContractFactory("SymmioBuildersNftManager");
@@ -36,6 +36,13 @@ task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager co
 				],
 				{ initializer: "initialize" });
 			await contract.waitForDeployment();
+
+			const symmToken = await ethers.getContractAt("Symmio", symm);
+			const buildersNft = await ethers.getContractAt("SymmioBuildersNft", nft);
+
+			await symmToken.grantRole(await symmToken.MINTER_ROLE(), await contract.getAddress());
+			await buildersNft.grantRole(await buildersNft.MINTER_ROLE(), await contract.getAddress());
+			await buildersNft.grantRole(await buildersNft.BURNER_ROLE(), await contract.getAddress());
 
 			const implDeployTx = await symmioBuildersNftManager.getDeployTransaction();
 			const implBytecode = implDeployTx.data;
