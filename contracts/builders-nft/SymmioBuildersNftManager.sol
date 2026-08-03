@@ -243,7 +243,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 
 		// Grant additional roles to the admin for initial setup
 		_grantRole(MINTER_ROLE, _admin);
-		_grantRole(SETTER_ROLE, _admin);
+		_grantRole(SYNC_ROLE, _admin);
 	}
 
 	/* ────────────────────── Core NFT & Locking Functions ────────────────────── */
@@ -296,7 +296,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param tokenId ID of the NFT to lock tokens into.
 	 * @param amount  Amount of SYMM tokens to lock.
 	 */
-	function lock(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
+	function lockIntoNFT(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
 		if (amount == 0) revert ZeroAmount();
 		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 
@@ -379,7 +379,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 *      Only callable by the NFT owner and only before cliff completion.
 	 */
 	function cancelUnlock(uint256 unlockId) external nonReentrant whenNotPaused {
-		UnlockRequest storage request = unlockRequests[unlockId];
+		UnlockRequest memory request = unlockRequests[unlockId];
 		if (request.amount == 0) revert UnlockNotFound();
 		if (request.owner != msg.sender) revert NotTokenOwner();
 		if (request.vestingStarted) revert VestingAlreadyStarted();
@@ -416,14 +416,14 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 *      Only callable by NFT owner after cliff period completion.
 	 */
 	function completeCliffAndStartVesting(uint256 unlockId) external nonReentrant whenNotPaused {
-		UnlockRequest storage request = unlockRequests[unlockId];
+		UnlockRequest memory request = unlockRequests[unlockId];
 		if (request.amount == 0) revert UnlockNotFound();
 		if (request.owner != msg.sender) revert NotTokenOwner();
 		if (request.vestingStarted) revert VestingAlreadyStarted();
 		if (block.timestamp < request.unlockInitiatedTime + cliffDuration) revert CliffNotPassed();
 
 		// Mark vesting as started
-		request.vestingStarted = true;
+		unlockRequests[unlockId].vestingStarted = true;
 
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(request.tokenId);
 		uint256 newAmount = data.amount - request.amount;
@@ -444,7 +444,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		uint256[] memory planIds = _setupVestingPlans(address(SYMM), block.timestamp, block.timestamp + vestingDuration, users, amounts);
 
 		// Link vesting plan to unlock request
-		request.vestingPlanId = planIds[0];
+		unlockRequests[unlockId].vestingPlanId = planIds[0];
 
 		emit VestingStarted(unlockId, request.tokenId, request.owner, request.amount, planIds[0]);
 	}
