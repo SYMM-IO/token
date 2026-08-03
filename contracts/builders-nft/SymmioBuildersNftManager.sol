@@ -5,7 +5,7 @@ pragma solidity ^0.8.27;
  * @title  SymmioBuildersNftManager
  * @notice Comprehensive manager contract for SymmioBuildersNft that handles all complex logic
  *         including SYMM token locking, unlock processes with cliff and vesting, merging,
- *         fee collection, and cross-chain sync. Integrates full Vesting functionality.
+ *         and cross-chain sync. Integrates full Vesting functionality.
  *
  * @dev    Core features include:
  *         • SYMM token locking with burning and without burning (for MINTER_ROLE)
@@ -14,7 +14,6 @@ pragma solidity ^0.8.27;
  *         • Time-locked unlock functionality with cliff periods
  *         • Full Vesting functionality (linear vesting, penalties, percentage claims)
  *         • Unlock request management with unique ID tracking
- *         • Fee collector management and notifications
  *         • Cross-chain synchronization capabilities
  *         • Transfer restrictions based on unlock status
  *         • Token minting capabilities for vesting operations
@@ -38,13 +37,6 @@ interface IERC20Burnable is IERC20 {
 /// @notice Minimal mintable extension for SYMM token.
 interface IERC20Mintable is IERC20 {
 	function mint(address to, uint256 amount) external;
-}
-
-/**
- * @notice Interface for the fee collector contract handling fee collection.
- */
-interface ISymmioFeeCollector {
-	function onLockedAmountChanged(int256 amount) external;
 }
 
 contract SymmioBuildersNftManager is VestingV2 {
@@ -77,9 +69,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 
 	/// @notice Counter for generating unique unlock request IDs sequentially.
 	uint256 private _unlockIdCounter;
-
-	/// @notice Mapping of token ID to its related fee collector addresses.
-	mapping(uint256 => address[]) public tokenRelatedFeeCollectors;
 
 	/// @notice Mapping of unlock request ID to complete request details.
 	mapping(uint256 => UnlockRequest) public unlockRequests;
@@ -192,20 +181,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 */
 	event VestingDurationUpdated(uint256 newDuration);
 
-	/**
-	 * @notice Emitted when fee collectors are added to an NFT.
-	 * @param tokenId      ID of the NFT.
-	 * @param feeCollector Address of the fee collector added.
-	 */
-	event FeeCollectorAdded(uint256 indexed tokenId, address feeCollector);
-
-	/**
-	 * @notice Emitted when fee collectors are removed from an NFT.
-	 * @param tokenId      ID of the NFT.
-	 * @param feeCollector Address of the fee collector removed.
-	 */
-	event FeeCollectorRemoved(uint256 indexed tokenId, address feeCollector);
-
 	/* ─────────────────────────────── Errors ─────────────────────────────── */
 
 	error AmountBelowMinimum(uint256 amount, uint256 minimum);
@@ -222,9 +197,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	error VestingAlreadyStarted();
 	error InvalidDuration();
 	error InvalidPenalty(uint256 penalty);
-	error InvalidFeeCollector(address feeCollector);
-	error FeeCollectorAlreadyAdded(address feeCollector);
-	error FeeCollectorNotFound(address feeCollector);
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -282,7 +254,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param brandName Custom brand name for the NFT.
 	 * @return tokenId  ID of the newly minted NFT.
 	 *
-	 * @dev Burns the SYMM tokens, mints an NFT, stores lock data, and notifies fee collectors.
+	 * @dev Burns the SYMM tokens, mints an NFT, and stores lock data.
 	 */
 	function mintAndLock(uint256 amount, string memory brandName) external nonReentrant whenNotPaused returns (uint256 tokenId) {
 		if (amount < minLockAmount) revert AmountBelowMinimum(amount, minLockAmount);
@@ -335,9 +307,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
 		nftContract.updateLockData(tokenId, data.amount + amount, data.unlockingAmount, data.name);
 
-		// Notify fee collectors
-		_notifyFeeCollectors(tokenId, int256(amount));
-
 		emit TokenLocked(msg.sender, tokenId, amount);
 	}
 
@@ -360,10 +329,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Merge locked amounts
 		uint256 newAmount = targetData.amount + sourceData.amount;
 		nftContract.updateLockData(targetTokenId, newAmount, targetData.unlockingAmount, targetData.name);
-
-		// Notify fee collectors for both NFTs
-		_notifyFeeCollectors(targetTokenId, int256(sourceData.amount));
-		_notifyFeeCollectors(sourceTokenId, -int256(sourceData.amount));
 
 		// Burn the source NFT and clear its data
 		nftContract.burn(sourceTokenId);
@@ -403,9 +368,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 
 		tokenUnlockIds[tokenId].push(unlockId);
 
-		// Notify fee collectors
-		_notifyFeeCollectors(tokenId, -int256(amount));
-
 		emit UnlockInitiated(unlockId, tokenId, msg.sender, amount, block.timestamp + cliffDuration);
 	}
 
@@ -442,9 +404,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Update NFT contract to cancel the unlock
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
 		nftContract.updateLockData(tokenId, data.amount, data.unlockingAmount - amount, data.name);
-
-		// Notify fee collectors
-		_notifyFeeCollectors(tokenId, int256(amount));
 
 		emit UnlockCancelled(unlockId, tokenId, owner, amount);
 	}
@@ -501,12 +460,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		if (tokenIds.length != lockDatas.length) revert LengthMismatch();
 
 		for (uint256 i = 0; i < tokenIds.length; i++) {
-			uint256 oldAmount = nftContract.getLockData(tokenIds[i]).amount;
-			uint256 newAmount = lockDatas[i].amount;
 			nftContract.updateLockData(tokenIds[i], lockDatas[i].amount, lockDatas[i].unlockingAmount, lockDatas[i].name);
-
-			// Notify fee collectors of the change
-			_notifyFeeCollectors(tokenIds[i], int256(newAmount) - int256(oldAmount));
 		}
 	}
 
@@ -546,54 +500,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		emit VestingDurationUpdated(_vestingDuration);
 	}
 
-	/**
-	 * @notice Add fee collectors to an NFT.
-	 * @param tokenId       ID of the NFT to add fee collectors to.
-	 * @param feeCollectors Array of fee collector addresses to add.
-	 */
-	function addFeeCollector(uint256 tokenId, address[] calldata feeCollectors) external onlyRole(SETTER_ROLE) {
-		for (uint256 i = 0; i < feeCollectors.length; i++) {
-			address feeCollector = feeCollectors[i];
-			if (feeCollector == address(0)) revert InvalidFeeCollector(feeCollector);
-
-			address[] storage collectors = tokenRelatedFeeCollectors[tokenId];
-			for (uint256 j = 0; j < collectors.length; j++) {
-				if (collectors[j] == feeCollector) revert FeeCollectorAlreadyAdded(feeCollector);
-			}
-
-			collectors.push(feeCollector);
-			emit FeeCollectorAdded(tokenId, feeCollector);
-		}
-	}
-
-	/**
-	 * @notice Remove a fee collector from an NFT.
-	 * @param tokenId      ID of the NFT to remove fee collector from.
-	 * @param feeCollector Address of the fee collector to remove.
-	 */
-	function removeFeeCollector(uint256 tokenId, address feeCollector) external onlyRole(SETTER_ROLE) {
-		address[] storage collectors = tokenRelatedFeeCollectors[tokenId];
-		for (uint256 i = 0; i < collectors.length; i++) {
-			if (collectors[i] == feeCollector) {
-				collectors[i] = collectors[collectors.length - 1];
-				collectors.pop();
-				emit FeeCollectorRemoved(tokenId, feeCollector);
-				return;
-			}
-		}
-		revert FeeCollectorNotFound(feeCollector);
-	}
-
 	/* ────────────────────────── View Functions ────────────────────────── */
-
-	/**
-	 * @notice Get all fee collectors for a specific NFT.
-	 * @param tokenId ID of the NFT.
-	 * @return Array of fee collector addresses.
-	 */
-	function getTokenFeeCollectors(uint256 tokenId) external view returns (address[] memory) {
-		return tokenRelatedFeeCollectors[tokenId];
-	}
 
 	/**
 	 * @notice Get all unlock request IDs for a specific NFT.
@@ -650,18 +557,6 @@ contract SymmioBuildersNftManager is VestingV2 {
 	}
 
 	/* ───────────────────────── Internal Helpers ───────────────────────── */
-
-	/**
-	 * @notice Notify all fee collectors for an NFT about locked amount changes.
-	 * @param tokenId ID of the NFT.
-	 * @param amount  Change in locked amount (positive or negative).
-	 */
-	function _notifyFeeCollectors(uint256 tokenId, int256 amount) private {
-		address[] storage collectors = tokenRelatedFeeCollectors[tokenId];
-		for (uint256 i = 0; i < collectors.length; i++) {
-			ISymmioFeeCollector(collectors[i]).onLockedAmountChanged(amount);
-		}
-	}
 
 	/**
 	 * @notice Override to handle SYMM token minting when needed for vesting.
