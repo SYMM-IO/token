@@ -421,7 +421,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 */
 	function _claimRewardsFor(address user) internal {
 		uint256 length = rewardTokens.length;
-		for (uint256 i = 0; i < length; ) {
+		for (uint256 i = 0; i < length;) {
 			address token = rewardTokens[i];
 			uint256 reward = rewards[user][token];
 			if (reward > 0) {
@@ -447,7 +447,7 @@ contract SymmStaking is Initializable, AccessControlEnumerableUpgradeable, Reent
 	 */
 	function _updateRewardsStates(address account) internal {
 		uint256 length = rewardTokens.length;
-		for (uint256 i = 0; i < length; ) {
+		for (uint256 i = 0; i < length;) {
 			address token = rewardTokens[i];
 			TokenRewardState storage state = rewardState[token];
 

@@ -24,13 +24,14 @@
     "hardhat": "^2.22.18",
     "hardhat-gas-reporter": "^1.0.10",
     "mocha": "^10.7.3",
+    "prettier": "^3.9.6",
+    "prettier-plugin-solidity": "^2.4.0",
     "solidity-coverage": "^0.8.13",
     "ts-node": "^10.9.2",
     "typechain": "^8.3.2",
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "csv-parse": "^5.6.0",
-    "prettier-plugin-solidity": "^2.1.0"
+    "csv-parse": "^5.6.0"
   }
 }
