@@ -21,28 +21,43 @@ pragma solidity ^0.8.27;
  *         This contract acts as the central logic hub while the NFT contract remains simple.
  */
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { AccessControlEnumerableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "../vesting/VestingV2.sol";
-import "./interfaces/ISymmioBuildersNft.sol";
+import { Flow, VestingFlowLib } from "./libraries/VestingFlowLib.sol";
+import { ISymmioBuildersNft } from "./interfaces/ISymmioBuildersNft.sol";
 
 /* ────────────────────────── External Interfaces ────────────────────────── */
 
-/// @notice Minimal burnable extension for any ERC‑20 we treat as SYMM.
-interface IERC20Burnable is IERC20 {
+/// @notice Minimal burnable and mintable extension for any ERC‑20.
+interface IERC20Extended is IERC20 {
 	function burnFrom(address account, uint256 amount) external;
-}
 
-/// @notice Minimal mintable extension for SYMM token.
-interface IERC20Mintable is IERC20 {
 	function mint(address to, uint256 amount) external;
 }
 
-contract SymmioBuildersNftManager is VestingV2 {
-	using SafeERC20 for IERC20;
+contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+	using SafeERC20 for IERC20Extended;
+	using VestingFlowLib for Flow;
 
-	/* ─────────────────────────────── Additional Roles ─────────────────────────────── */
+	/* ─────────────────────────────── Roles ─────────────────────────────── */
+
+	/// @notice Role for setting configs.
+	bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
+
+	/// @notice Role for claiming tokens on behalf of users.
+	bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+	/// @notice Role for pausing contract operations.
+	bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
+	/// @notice Role for unpausing contract operations.
+	bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
 	/// @notice Role for minting NFTs without burning SYMM tokens.
 	bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -53,7 +68,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
 	/// @notice The SYMM token contract address (burnable and mintable).
-	IERC20Burnable public SYMM;
+	IERC20Extended public SYMM;
 
 	/// @notice The SymmioBuildersNft contract.
 	ISymmioBuildersNft public nftContract;
@@ -67,14 +82,28 @@ contract SymmioBuildersNftManager is VestingV2 {
 	/// @notice Duration of the vesting period in seconds after cliff completion.
 	uint256 public vestingDuration;
 
+	/// @notice Penalty rate for claiming locked tokens early (scaled by 1e18).
+	/// @dev Example: 0.1e18 represents a 10% penalty on early claims.
+	uint256 public lockedClaimPenaltyRate;
+
+	/// @notice Address that receives penalties from early claims of locked tokens.
+	address public lockedClaimPenaltyReceiver;
+
 	/// @notice Counter for generating unique unlock request IDs sequentially.
 	uint256 private _unlockIdCounter;
+
+	/// @notice Total vested amount that not claimed yet across all flows.
+	uint256 public totalVested;
 
 	/// @notice Mapping of unlock request ID to complete request details.
 	mapping(uint256 => UnlockRequest) public unlockRequests;
 
 	/// @notice Mapping of NFT token ID to array of associated unlock request IDs.
 	mapping(uint256 => uint256[]) public tokenUnlockIds;
+
+	uint256 private _nextFlowId;
+	mapping(uint256 => Flow) private _flows;
+	mapping(address => uint256[]) private _userFlowIds;
 
 	/* ─────────────────────────────── Structs ─────────────────────────────── */
 
@@ -86,7 +115,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param tokenId              ID of the NFT being unlocked.
 	 * @param cliffPassed          Whether the cliff period has passed.
 	 * @param vestingStarted       Whether vesting has started for this request.
-	 * @param vestingPlanId        ID of the created vesting plan in Vesting.
+	 * @param vestingFlowId        ID of the created vesting flow.
 	 */
 	struct UnlockRequest {
 		uint256 amount;
@@ -94,7 +123,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 		address owner;
 		uint256 tokenId;
 		bool vestingStarted;
-		uint256 vestingPlanId;
+		uint256 vestingFlowId;
 	}
 
 	/* ─────────────────────────────── Events ─────────────────────────────── */
@@ -157,11 +186,11 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @notice Emitted when vesting starts for an unlock request.
 	 * @param unlockId       ID of the unlock request.
 	 * @param tokenId        ID of the NFT.
-	 * @param vestingPlanId  ID of the created vesting plan.
+	 * @param vestingFlowId  ID of the created vesting flow.
 	 * @param owner          Owner of the NFT.
 	 * @param amount         Amount of tokens entering vesting.
 	 */
-	event VestingStarted(uint256 indexed unlockId, uint256 indexed tokenId, address owner, uint256 amount, uint256 vestingPlanId);
+	event VestingStarted(uint256 indexed unlockId, uint256 indexed tokenId, address owner, uint256 amount, uint256 vestingFlowId);
 
 	/**
 	 * @notice Emitted when the minimum lock amount is updated.
@@ -181,22 +210,39 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 */
 	event VestingDurationUpdated(uint256 newDuration);
 
+	/**
+	 * @notice Emitted when unlocked tokens are claimed from a vesting flow.
+	 * @param user   Address of the user claiming the tokens.
+	 * @param flowId ID of the vesting flow.
+	 * @param amount Amount of tokens claimed.
+	 */
+	event UnlockedTokenClaimed(address indexed user, uint256 indexed flowId, uint256 amount);
+
+	/**
+	 * @notice Emitted when locked tokens are claimed with a penalty.
+	 * @param user    Address of the user claiming the tokens.
+	 * @param flowId  ID of the vesting flow.
+	 * @param amount  Total amount of tokens claimed (before penalty).
+	 * @param penalty Penalty amount deducted from the claim.
+	 */
+	event LockedTokenClaimed(address indexed user, uint256 indexed flowId, uint256 amount, uint256 penalty);
+
 	/* ─────────────────────────────── Errors ─────────────────────────────── */
 
+	error ZeroAddress();
 	error AmountBelowMinimum(uint256 amount, uint256 minimum);
 	error NotTokenOwner();
 	error InsufficientLockedAmount();
-	error InvalidTokenId();
 	error InvalidMerge();
 	error ZeroAmount();
 	error TokenHasActiveUnlock();
-	error UnauthorizedAccess(address caller, address requiredCaller);
 	error LengthMismatch();
 	error UnlockNotFound();
 	error CliffNotPassed();
 	error VestingAlreadyStarted();
 	error InvalidDuration();
 	error InvalidPenalty(uint256 penalty);
+	error NotOwner();
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -213,7 +259,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @param _minLockAmount                Minimum amount of SYMM tokens required to mint an NFT.
 	 * @param _cliffDuration                Duration of the cliff period in seconds.
 	 * @param _vestingDuration              Duration of the vesting period in seconds.
-	 * @param _lockedClaimPenalty           Penalty rate for early claims (scaled by 1e18).
+	 * @param _lockedClaimPenaltyRate       Penalty rate for early claims (scaled by 1e18).
 	 * @param _lockedClaimPenaltyReceiver   Address to receive penalties from early claims.
 	 */
 	function initialize(
@@ -223,27 +269,53 @@ contract SymmioBuildersNftManager is VestingV2 {
 		uint256 _minLockAmount,
 		uint256 _cliffDuration,
 		uint256 _vestingDuration,
-		uint256 _lockedClaimPenalty,
+		uint256 _lockedClaimPenaltyRate,
 		address _lockedClaimPenaltyReceiver
 	) public initializer {
+		__AccessControlEnumerable_init();
+		__Pausable_init();
+		__ReentrancyGuard_init();
+
 		if (_symm == address(0) || _nftContract == address(0) || _admin == address(0) || _lockedClaimPenaltyReceiver == address(0))
 			revert ZeroAddress();
 		if (_cliffDuration == 0 || _vestingDuration == 0) revert InvalidDuration();
-		if (_lockedClaimPenalty > 1e18) revert InvalidPenalty(_lockedClaimPenalty);
-
-		// Initialize parent Vesting contract
-		__vesting_init(_admin, _lockedClaimPenalty, _lockedClaimPenaltyReceiver);
+		if (_lockedClaimPenaltyRate > 1e18) revert InvalidPenalty(_lockedClaimPenaltyRate);
 
 		// Set contract-specific state
-		SYMM = IERC20Burnable(_symm);
+		SYMM = IERC20Extended(_symm);
 		nftContract = ISymmioBuildersNft(_nftContract);
 		minLockAmount = _minLockAmount;
 		cliffDuration = _cliffDuration;
 		vestingDuration = _vestingDuration;
+		lockedClaimPenaltyRate = _lockedClaimPenaltyRate;
+		lockedClaimPenaltyReceiver = _lockedClaimPenaltyReceiver;
 
-		// Grant additional roles to the admin for initial setup
+		// Grant all roles to the admin
+		_grantRole(DEFAULT_ADMIN_ROLE, _admin);
+		_grantRole(SETTER_ROLE, _admin);
+		_grantRole(PAUSER_ROLE, _admin);
+		_grantRole(UNPAUSER_ROLE, _admin);
+		_grantRole(OPERATOR_ROLE, _admin);
 		_grantRole(MINTER_ROLE, _admin);
 		_grantRole(SYNC_ROLE, _admin);
+	}
+
+	/* ────────────────────── Pausing Functions ────────────────────── */
+
+	/**
+	 * @notice Pause the contract, disabling state-changing functions.
+	 * @dev Only callable by accounts with PAUSER_ROLE.
+	 */
+	function pause() external onlyRole(PAUSER_ROLE) {
+		_pause();
+	}
+
+	/**
+	 * @notice Unpause the contract, enabling state-changing functions.
+	 * @dev Only callable by accounts with UNPAUSER_ROLE.
+	 */
+	function unpause() external onlyRole(UNPAUSER_ROLE) {
+		_unpause();
 	}
 
 	/* ────────────────────── Core NFT & Locking Functions ────────────────────── */
@@ -363,7 +435,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 			owner: msg.sender,
 			tokenId: tokenId,
 			vestingStarted: false,
-			vestingPlanId: 0
+			vestingFlowId: 0
 		});
 
 		tokenUnlockIds[tokenId].push(unlockId);
@@ -411,16 +483,14 @@ contract SymmioBuildersNftManager is VestingV2 {
 	/**
 	 * @notice Complete the cliff period and start vesting for an unlock request.
 	 * @param unlockId ID of the unlock request to process.
-	 *
-	 * @dev Uses inherited Vesting functionality to create a sophisticated vesting plan.
-	 *      Only callable by NFT owner after cliff period completion.
 	 */
 	function completeCliffAndStartVesting(uint256 unlockId) external nonReentrant whenNotPaused {
 		UnlockRequest memory request = unlockRequests[unlockId];
 		if (request.amount == 0) revert UnlockNotFound();
 		if (request.owner != msg.sender) revert NotTokenOwner();
 		if (request.vestingStarted) revert VestingAlreadyStarted();
-		if (block.timestamp < request.unlockInitiatedTime + cliffDuration) revert CliffNotPassed();
+		uint256 startTime = request.unlockInitiatedTime + cliffDuration;
+		if (block.timestamp < startTime) revert CliffNotPassed();
 
 		// Mark vesting as started
 		unlockRequests[unlockId].vestingStarted = true;
@@ -435,18 +505,129 @@ contract SymmioBuildersNftManager is VestingV2 {
 		// Burn the NFT if no locked tokens remain
 		if (newAmount == 0 && newUnlockingAmount == 0) nftContract.burn(request.tokenId);
 
-		// Create vesting plan using inherited Vesting functionality
-		address[] memory users = new address[](1);
-		users[0] = request.owner;
-		uint256[] memory amounts = new uint256[](1);
-		amounts[0] = request.amount;
+		// Create vesting flow
+		uint256 flowId = _nextFlowId++;
+		_flows[flowId] = Flow({ owner: request.owner, amount: request.amount, startTime: startTime, endTime: startTime + vestingDuration });
+		_userFlowIds[request.owner].push(flowId);
+		totalVested += request.amount;
 
-		uint256[] memory planIds = _setupVestingPlans(address(SYMM), block.timestamp, block.timestamp + vestingDuration, users, amounts);
+		// Link vesting flow to unlock request
+		unlockRequests[unlockId].vestingFlowId = flowId;
 
-		// Link vesting plan to unlock request
-		unlockRequests[unlockId].vestingPlanId = planIds[0];
+		emit VestingStarted(unlockId, request.tokenId, request.owner, request.amount, flowId);
+	}
 
-		emit VestingStarted(unlockId, request.tokenId, request.owner, request.amount, planIds[0]);
+	/* ───────────────── Token Claim Functions ───────────────── */
+
+	/**
+	 * @notice Claim unlocked tokens for the caller from a specific vesting flow.
+	 * @param flowId ID of the vesting flow.
+	 *
+	 * @dev Claims only fully vested tokens without penalty.
+	 */
+	function claimUnlockedToken(uint256 flowId) external whenNotPaused nonReentrant returns (uint256 unlockedClaimed) {
+		(, unlockedClaimed) = _claimUnlockedToken(msg.sender, flowId);
+	}
+
+	/**
+	 * @notice Claim unlocked tokens on behalf of a user from a specific vesting flow.
+	 * @param user   Address of the user to claim for.
+	 * @param flowId ID of the vesting flow.
+	 *
+	 * @dev Only callable by accounts with OPERATOR_ROLE.
+	 */
+	function claimUnlockedTokenFor(
+		address user,
+		uint256 flowId
+	) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant returns (uint256 unlockedClaimed) {
+		(, unlockedClaimed) = _claimUnlockedToken(user, flowId);
+	}
+
+	/**
+	 * @notice Claim locked tokens for the caller with penalty deduction.
+	 * @param flowId ID of the vesting flow.
+	 * @param amount Amount of locked tokens to claim.
+	 *
+	 * @dev Claims unlocked tokens first, then processes locked amount with penalty.
+	 */
+	function claimLockedToken(
+		uint256 flowId,
+		uint256 amount
+	) external whenNotPaused nonReentrant returns (uint256 unlockedClaimed, uint256 lockedClaimed, uint256 penalty) {
+		(unlockedClaimed, lockedClaimed, penalty) = _claimLockedToken(msg.sender, flowId, amount);
+	}
+
+	/**
+	 * @notice Claim locked tokens on behalf of a user with penalty deduction.
+	 * @param user   Address of the user to claim for.
+	 * @param flowId ID of the vesting flow.
+	 * @param amount Amount of locked tokens to claim.
+	 *
+	 * @dev Only callable by accounts with OPERATOR_ROLE.
+	 */
+	function claimLockedTokenFor(
+		address user,
+		uint256 flowId,
+		uint256 amount
+	) external onlyRole(OPERATOR_ROLE) whenNotPaused nonReentrant returns (uint256 unlockedClaimed, uint256 lockedClaimed, uint256 penalty) {
+		(unlockedClaimed, lockedClaimed, penalty) = _claimLockedToken(user, flowId, amount);
+	}
+
+	/**
+	 * @dev Internal function to claim unlocked tokens from a vesting flow.
+	 * @param user   Address of the user claiming tokens.
+	 * @param flowId ID of the vesting flow.
+	 *
+	 * @dev Transfers claimable tokens and updates flow state and total vested amounts.
+	 */
+	function _claimUnlockedToken(address user, uint256 flowId) internal returns (bool flowDeleted, uint256 unlockedAmount) {
+		Flow storage flow = _flows[flowId];
+		if (flow.owner != user) revert NotOwner();
+		unlockedAmount = flow.unlocked();
+		if (unlockedAmount > 0) {
+			// Update vesting flow and total vested amount
+			totalVested -= unlockedAmount;
+			flowDeleted = flow.shrink();
+			if (flowDeleted) _removeUserFlowId(user, flowId);
+
+			// Ensure sufficient balance before transfer
+			_ensureSufficientBalance(unlockedAmount);
+			SYMM.safeTransfer(user, unlockedAmount);
+			emit UnlockedTokenClaimed(user, flowId, unlockedAmount);
+		}
+	}
+
+	/**
+	 * @dev Internal function to claim locked tokens with penalty deduction.
+	 * @param user   Address of the user claiming tokens.
+	 * @param flowId ID of the vesting flow.
+	 * @param amount Amount of locked tokens to claim.
+	 *
+	 * @dev Claims unlocked tokens first, then processes locked amount with penalty.
+	 */
+	function _claimLockedToken(
+		address user,
+		uint256 flowId,
+		uint256 amount
+	) internal returns (uint256 unlockedClaimed, uint256 lockedClaimed, uint256 penalty) {
+		// Claim any unlocked tokens first
+		bool flowDeleted;
+		(flowDeleted, unlockedClaimed) = _claimUnlockedToken(user, flowId);
+		if (!flowDeleted) {
+			Flow storage flow = _flows[flowId];
+			amount = Math.min(amount, flow.amount);
+			flowDeleted = flow.decreaseLockedAmount(amount);
+			if (flowDeleted) _removeUserFlowId(user, flowId);
+			totalVested -= amount;
+
+			// Calculate and apply penalty
+			penalty = (amount * lockedClaimPenaltyRate) / 1e18;
+			lockedClaimed = amount - penalty;
+			_ensureSufficientBalance(amount);
+			SYMM.safeTransfer(user, lockedClaimed);
+			SYMM.safeTransfer(lockedClaimPenaltyReceiver, penalty);
+			emit LockedTokenClaimed(user, flowId, amount, penalty);
+		}
 	}
 
 	/* ───────────────────── Cross-Chain Sync Functions ───────────────────── */
@@ -480,7 +661,7 @@ contract SymmioBuildersNftManager is VestingV2 {
 	 * @notice Update the cliff duration for new unlock requests.
 	 * @param _cliffDuration New cliff duration in seconds.
 	 *
-	 * @dev Only callable by accounts with DURATION_SETTER_ROLE. Must be non-zero.
+	 * @dev Only callable by accounts with SETTER_ROLE. Must be non-zero.
 	 */
 	function setCliffDuration(uint256 _cliffDuration) external onlyRole(SETTER_ROLE) {
 		if (_cliffDuration == 0) revert InvalidDuration();
@@ -489,10 +670,10 @@ contract SymmioBuildersNftManager is VestingV2 {
 	}
 
 	/**
-	 * @notice Update the vesting duration for new vesting plans.
+	 * @notice Update the vesting duration for new vesting flows.
 	 * @param _vestingDuration New vesting duration in seconds.
 	 *
-	 * @dev Only callable by accounts with DURATION_SETTER_ROLE. Must be non-zero.
+	 * @dev Only callable by accounts with SETTER_ROLE. Must be non-zero.
 	 */
 	function setVestingDuration(uint256 _vestingDuration) external onlyRole(SETTER_ROLE) {
 		if (_vestingDuration == 0) revert InvalidDuration();
@@ -556,18 +737,69 @@ contract SymmioBuildersNftManager is VestingV2 {
 		return block.timestamp >= request.unlockInitiatedTime + cliffDuration;
 	}
 
+	/**
+	 * @notice Get the locked token amount for a specific vesting flow.
+	 * @param flowId ID of the vesting flow.
+	 * @return Amount of tokens still locked in the flow.
+	 */
+	function getLockedAmountForFlow(uint256 flowId) public view returns (uint256) {}
+
+	/**
+	 * @notice Get the claimable token amount for a specific vesting flow.
+	 * @param flowId ID of the vesting flow.
+	 * @return Amount of tokens currently claimable from the flow.
+	 */
+	function getClaimableAmountForFlow(uint256 flowId) public view returns (uint256) {}
+
+	/**
+	 * @notice Get the total locked tokens for a user across all vesting.
+	 * @param user  Address of the user.
+	 * @return totalLocked Total amount of locked tokens across all flows.
+	 */
+	function getTotalLockedAmount(address user) public view returns (uint256 totalLocked) {
+		// uint256 count = userVestingFlowCount[token][user];
+		// for (uint256 i = 0; i < count; i++) {
+		// 	totalLocked += ;
+		// }
+	}
+
+	/**
+	 * @notice Get the total claimable tokens for a user across all vesting flows.
+	 * @param user  Address of the user.
+	 * @return totalClaimable Total amount of claimable tokens across all flows.
+	 */
+	function getTotalClaimableAmount(address user) public view returns (uint256 totalClaimable) {
+		// uint256 count = userVestingFlowCount[token][user];
+		// for (uint256 i = 0; i < count; i++) {
+		// 	totalClaimable += ;
+		// }
+	}
+
 	/* ───────────────────────── Internal Helpers ───────────────────────── */
 
 	/**
-	 * @notice Override to handle SYMM token minting when needed for vesting.
-	 * @param token  Address of the token to mint.
-	 * @param amount Amount of tokens to mint.
-	 *
-	 * @dev This function mints SYMM tokens when the contract needs more tokens for vesting operations.
+	 * @dev Ensure the contract has sufficient SYMM balance, minting if necessary.
+	 * @param amount Required amount of tokens.
 	 */
-	function _mintTokenIfPossible(address token, uint256 amount) internal virtual override {
-		if (token == address(SYMM)) {
-			IERC20Mintable(address(SYMM)).mint(address(this), amount);
+	function _ensureSufficientBalance(uint256 amount) internal {
+		uint256 currentBalance = SYMM.balanceOf(address(this));
+		if (currentBalance < amount) {
+			uint256 deficit = amount - currentBalance;
+			// Attempt to mint tokens to cover the deficit
+			SYMM.mint(address(this), deficit);
+		}
+	}
+
+	function _removeUserFlowId(address user, uint256 flowId) internal {
+		uint256[] storage flowIds = _userFlowIds[user];
+		uint256 length = flowIds.length;
+
+		for (uint256 i; i < length; ++i) {
+			if (flowIds[i] == flowId) {
+				flowIds[i] = flowIds[length - 1];
+				flowIds.pop();
+				return;
+			}
 		}
 	}
 
