@@ -120,16 +120,20 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param unlockInitiatedTime  Timestamp when unlock was initiated.
 	 * @param owner                Owner of the NFT at unlock initiation.
 	 * @param tokenId              ID of the NFT being unlocked.
-	 * @param vestingStarted       Whether vesting has started for this request.
-	 * @param vestingFlowId        ID of the created vesting flow.
+	 * @param vestingFlowId        ID of the vesting flow created for this request.
+	 * @param vestingStartTime     Timestamp at which the request's vesting flow starts.
+	 * @param vestingEndTime       Timestamp at which the request's vesting flow ends.
+	 * @param netClaimedAmount     Cumulative amount transferred to the owner after penalties.
 	 */
 	struct UnlockRequest {
 		uint256 amount;
 		uint256 unlockInitiatedTime;
 		address owner;
 		uint256 tokenId;
-		bool vestingStarted;
 		uint256 vestingFlowId;
+		uint256 vestingStartTime;
+		uint256 vestingEndTime;
+		uint256 netClaimedAmount;
 	}
 
 	/* ─────────────────────────────── Events ─────────────────────────────── */
@@ -444,8 +448,10 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 			unlockInitiatedTime: block.timestamp,
 			owner: msg.sender,
 			tokenId: tokenId,
-			vestingStarted: false,
-			vestingFlowId: 0
+			vestingFlowId: 0,
+			vestingStartTime: 0,
+			vestingEndTime: 0,
+			netClaimedAmount: 0
 		});
 
 		tokenUnlockIds[tokenId].push(unlockId);
@@ -465,7 +471,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		UnlockRequest memory request = unlockRequests[unlockId];
 		if (request.amount == 0) revert UnlockNotFound();
 		if (request.owner != msg.sender) revert NotTokenOwner();
-		if (request.vestingStarted) revert VestingAlreadyStarted();
+		if (request.vestingStartTime != 0) revert VestingAlreadyStarted();
 
 		uint256 amount = request.amount;
 		uint256 tokenId = request.tokenId;
@@ -499,15 +505,13 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 *      makes the corresponding elapsed portion claimable.
 	 */
 	function completeCliffAndStartVesting(uint256 unlockId) external nonReentrant whenNotPaused {
-		UnlockRequest memory request = unlockRequests[unlockId];
+		UnlockRequest storage request = unlockRequests[unlockId];
 		if (request.amount == 0) revert UnlockNotFound();
 		if (request.owner != msg.sender) revert NotTokenOwner();
-		if (request.vestingStarted) revert VestingAlreadyStarted();
+		if (request.vestingStartTime != 0) revert VestingAlreadyStarted();
 		uint256 startTime = request.unlockInitiatedTime + cliffDuration;
 		if (block.timestamp < startTime) revert CliffNotPassed();
-
-		// Mark vesting as started
-		unlockRequests[unlockId].vestingStarted = true;
+		uint256 endTime = startTime + vestingDuration;
 
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(request.tokenId);
 		uint256 newAmount = data.amount - request.amount;
@@ -521,12 +525,14 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 
 		// Create vesting flow
 		uint256 flowId = _nextFlowId++;
-		_flows[flowId] = Flow({ owner: request.owner, amount: request.amount, startTime: startTime, endTime: startTime + vestingDuration });
+		_flows[flowId] = Flow({ reqId: unlockId, amount: request.amount, startTime: startTime, endTime: endTime });
 		_userFlowIds[request.owner].push(flowId);
 		totalVested += request.amount;
 
-		// Link vesting flow to unlock request
-		unlockRequests[unlockId].vestingFlowId = flowId;
+		// Snapshot the vesting schedule and link both records for claim accounting.
+		request.vestingFlowId = flowId;
+		request.vestingStartTime = startTime;
+		request.vestingEndTime = endTime;
 
 		emit VestingStarted(unlockId, request.tokenId, request.owner, request.amount, flowId);
 	}
@@ -606,7 +612,8 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 */
 	function _claimUnlockedToken(address user, uint256 flowId) internal returns (bool flowDeleted, uint256 unlockedAmount) {
 		Flow storage flow = _flows[flowId];
-		if (flow.owner != user) revert NotOwner();
+		uint256 reqId = flow.reqId;
+		if (flow.amount == 0 || unlockRequests[reqId].owner != user) revert NotOwner();
 		unlockedAmount = flow.unlocked();
 		if (unlockedAmount > 0) {
 			// Update vesting flow and total vested amount
@@ -616,6 +623,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 
 			// Ensure sufficient balance before transfer
 			_ensureSufficientBalance(unlockedAmount);
+			unlockRequests[reqId].netClaimedAmount += unlockedAmount;
 			SYMM.safeTransfer(user, unlockedAmount);
 			emit UnlockedTokenClaimed(user, flowId, unlockedAmount);
 		}
@@ -642,6 +650,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		(flowDeleted, unlockedClaimed) = _claimUnlockedToken(user, flowId);
 		if (!flowDeleted) {
 			Flow storage flow = _flows[flowId];
+			uint256 reqId = flow.reqId;
 			amount = Math.min(amount, flow.amount);
 			flowDeleted = flow.decreaseLockedAmount(amount);
 			if (flowDeleted) _removeUserFlowId(user, flowId);
@@ -651,6 +660,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 			penalty = (amount * lockedClaimPenaltyRate) / 1e18;
 			lockedClaimed = amount - penalty;
 			_ensureSufficientBalance(amount);
+			unlockRequests[reqId].netClaimedAmount += lockedClaimed;
 			SYMM.safeTransfer(user, lockedClaimed);
 			SYMM.safeTransfer(lockedClaimPenaltyReceiver, penalty);
 			emit LockedTokenClaimed(user, flowId, amount, penalty);

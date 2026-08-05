@@ -3,13 +3,13 @@ pragma solidity >=0.8.18;
 
 /**
  * @notice State for a single linear vesting schedule.
- * @param owner Beneficiary entitled to claim from the flow.
+ * @param reqId Unlock request that created the flow and identifies its beneficiary.
  * @param amount Amount represented by the current flow segment.
  * @param startTime Timestamp at which the current segment starts vesting.
  * @param endTime Timestamp at which the remaining amount is fully vested.
  */
 struct Flow {
-	address owner;
+	uint256 reqId;
 	uint256 amount;
 	uint256 startTime;
 	uint256 endTime;
@@ -74,7 +74,7 @@ library VestingFlowLib {
 	/// @notice Deletes all state belonging to a flow.
 	/// @param self Flow to clear.
 	function clear(Flow storage self) internal {
-		delete self.owner;
+		delete self.reqId;
 		delete self.amount;
 		delete self.startTime;
 		delete self.endTime;

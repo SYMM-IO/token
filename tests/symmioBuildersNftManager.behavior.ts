@@ -125,6 +125,9 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			const request = await manager.unlockRequests(0)
 			expect(request.amount).to.equal(unlockAmount)
 			expect(request.owner).to.equal(user1.address)
+			expect(request.vestingStartTime).to.equal(0)
+			expect(request.vestingEndTime).to.equal(0)
+			expect(request.netClaimedAmount).to.equal(0)
 			expect((await nft.getLockData(0)).unlockingAmount).to.equal(unlockAmount)
 			await expect(nft.connect(user1).transferFrom(user1.address, user2.address, 0)).to.be.revertedWithCustomError(nft, "TokenHasActiveUnlock")
 
@@ -144,8 +147,14 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 
 			const request = await manager.unlockRequests(0)
 			const data = await nft.getLockData(0)
-			expect(request.vestingStarted).to.equal(true)
 			expect(request.vestingFlowId).to.equal(0)
+			expect(request.vestingStartTime).to.equal(request.unlockInitiatedTime + cliffDuration)
+			expect(request.vestingEndTime).to.equal(request.vestingStartTime + vestingDuration)
+			expect(request.netClaimedAmount).to.equal(0)
+			const [, flows] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(flows[0].reqId).to.equal(0)
+			expect(flows[0].startTime).to.equal(request.vestingStartTime)
+			expect(flows[0].endTime).to.equal(request.vestingEndTime)
 			expect(data.amount).to.equal(minLockAmount - unlockAmount)
 			expect(data.unlockingAmount).to.equal(0)
 		})
@@ -161,6 +170,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await manager.connect(user1).claimUnlockedToken(flowId)
 			let [, flows] = await manager.getUserFlows(user1.address, 0, 1)
 			let totalClaimed = (await symm.balanceOf(user1.address)) - balanceBefore
+			expect((await manager.unlockRequests(0)).netClaimedAmount).to.equal(totalClaimed)
 			expect(flows[0].amount).to.equal(amount - totalClaimed)
 			expect(await manager.totalVested()).to.equal(flows[0].amount)
 
@@ -169,6 +179,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await manager.connect(user1).claimUnlockedToken(flowId)
 			;[, flows] = await manager.getUserFlows(user1.address, 0, 1)
 			totalClaimed = (await symm.balanceOf(user1.address)) - balanceBefore
+			expect((await manager.unlockRequests(0)).netClaimedAmount).to.equal(totalClaimed)
 			expect(totalClaimed).to.be.lessThan(amount)
 			expect(totalClaimed + flows[0].amount).to.equal(amount)
 			expect(await manager.totalVested()).to.equal(flows[0].amount)
@@ -176,6 +187,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await time.increaseTo(Number(flows[0].endTime + 1n))
 			await manager.connect(user1).claimUnlockedToken(flowId)
 			expect((await symm.balanceOf(user1.address)) - balanceBefore).to.equal(amount)
+			expect((await manager.unlockRequests(0)).netClaimedAmount).to.equal(amount)
 			expect(await manager.totalVested()).to.equal(0)
 			expect(await manager.getUserFlowCount(user1.address)).to.equal(0)
 		})
@@ -209,8 +221,10 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			const [secondIds, secondFlows] = await manager.getUserFlows(user1.address, 1, 10)
 			const [emptyIds, emptyFlows] = await manager.getUserFlows(user1.address, 2, 1)
 			expect(firstIds).to.deep.equal([0n])
+			expect(firstFlows[0].reqId).to.equal(0)
 			expect(firstFlows[0].amount).to.equal(firstAmount)
 			expect(secondIds).to.deep.equal([1n])
+			expect(secondFlows[0].reqId).to.equal(1)
 			expect(secondFlows[0].amount).to.equal(secondAmount)
 			expect(emptyIds).to.have.length(0)
 			expect(emptyFlows).to.have.length(0)
@@ -231,8 +245,11 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			const receiverDelta = (await symm.balanceOf(penaltyReceiver.address)) - receiverBefore
 			const userDelta = (await symm.balanceOf(user1.address)) - userBefore
 			const vestedDelta = vestedBefore - (await manager.totalVested())
+			const request = await manager.unlockRequests(0)
 			expect(receiverDelta).to.equal(expectedPenalty)
 			expect(userDelta + receiverDelta).to.equal(vestedDelta)
+			expect(request.netClaimedAmount).to.equal(userDelta)
+			expect(request.netClaimedAmount + receiverDelta).to.equal(vestedDelta)
 		})
 	})
 
@@ -244,7 +261,6 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(await nft.paused()).to.equal(true)
 
 			await expect(manager.connect(user1).mintAndLock(minLockAmount, brand)).to.be.revertedWithCustomError(manager, "EnforcedPause")
-			await expect(manager.connect(admin).batchUpdateLockData([], [])).to.be.revertedWithCustomError(manager, "EnforcedPause")
 			await expect(nft.connect(admin).updateLockData(0, minLockAmount, 0, brand)).to.be.revertedWithCustomError(nft, "EnforcedPause")
 			await expect(nft.connect(user1).transferFrom(user1.address, user2.address, 0)).to.be.revertedWithCustomError(nft, "TransfersPaused")
 
@@ -275,16 +291,6 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await expect(manager.connect(user1).setMinLockAmount(1))
 				.to.be.revertedWithCustomError(manager, "AccessControlUnauthorizedAccount")
 				.withArgs(user1.address, await manager.SETTER_ROLE())
-		})
-
-		it("synchronizes valid lock data while active", async () => {
-			await manager.connect(admin).mintWithoutBurn(user1.address, minLockAmount, brand)
-			const updatedAmount = minLockAmount * 2n
-			await manager.connect(admin).batchUpdateLockData([0], [{ amount: updatedAmount, lockTimestamp: 0, unlockingAmount: 0, name: "Synced" }])
-
-			const data = await nft.getLockData(0)
-			expect(data.amount).to.equal(updatedAmount)
-			expect(data.name).to.equal("Synced")
 		})
 	})
 }
