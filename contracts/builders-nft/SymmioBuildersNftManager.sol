@@ -777,42 +777,52 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @notice Get the locked token amount for a specific vesting flow.
 	 * @param flowId ID of the vesting flow.
 	 * @return Amount of tokens still locked in the flow.
-	 * @dev This query is currently unimplemented and therefore returns zero.
+	 * @dev Returns zero for unknown or cleared flows.
 	 */
-	function getLockedAmountForFlow(uint256 flowId) public view returns (uint256) {}
+	function getLockedAmountForFlow(uint256 flowId) public view returns (uint256) {
+		Flow storage flow = _flows[flowId];
+		return flow.amount - flow.unlocked();
+	}
 
 	/**
 	 * @notice Get the claimable token amount for a specific vesting flow.
 	 * @param flowId ID of the vesting flow.
 	 * @return Amount of tokens currently claimable from the flow.
-	 * @dev This query is currently unimplemented and therefore returns zero.
+	 * @dev Returns zero for unknown or cleared flows.
 	 */
-	function getClaimableAmountForFlow(uint256 flowId) public view returns (uint256) {}
+	function getClaimableAmountForFlow(uint256 flowId) public view returns (uint256) {
+		return _flows[flowId].unlocked();
+	}
 
 	/**
 	 * @notice Get the total locked tokens for a user across all vesting.
 	 * @param user  Address of the user.
 	 * @return totalLocked Total amount of locked tokens across all flows.
-	 * @dev This aggregate query is currently unimplemented and therefore returns zero.
+	 * @dev Iterates over the user's active flows and may become expensive for accounts
+	 *      with a large flow count.
 	 */
 	function getTotalLockedAmount(address user) public view returns (uint256 totalLocked) {
-		// uint256 count = userVestingFlowCount[token][user];
-		// for (uint256 i = 0; i < count; i++) {
-		// 	totalLocked += ;
-		// }
+		uint256[] storage flowIds = _userFlowIds[user];
+		uint256 length = flowIds.length;
+
+		for (uint256 i; i < length; ++i) {
+			Flow storage flow = _flows[flowIds[i]];
+			totalLocked += flow.amount - flow.unlocked();
+		}
 	}
 
 	/**
 	 * @notice Get the total claimable tokens for a user across all vesting flows.
 	 * @param user  Address of the user.
 	 * @return totalClaimable Total amount of claimable tokens across all flows.
-	 * @dev This aggregate query is currently unimplemented and therefore returns zero.
+	 * @dev Iterates over the user's active flows and may become expensive for accounts
+	 *      with a large flow count.
 	 */
 	function getTotalClaimableAmount(address user) public view returns (uint256 totalClaimable) {
-		// uint256 count = userVestingFlowCount[token][user];
-		// for (uint256 i = 0; i < count; i++) {
-		// 	totalClaimable += ;
-		// }
+		uint256[] storage flowIds = _userFlowIds[user];
+		uint256 length = flowIds.length;
+
+		for (uint256 i; i < length; ++i) totalClaimable += _flows[flowIds[i]].unlocked();
 	}
 
 	/* ───────────────────────── Internal Helpers ───────────────────────── */
