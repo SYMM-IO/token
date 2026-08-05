@@ -4,8 +4,8 @@ pragma solidity ^0.8.27;
 /**
  * @title  SymmioBuildersNftManager
  * @notice Comprehensive manager contract for SymmioBuildersNft that handles all complex logic
- *         including SYMM token locking, unlock processes with cliff and vesting, merging,
- *         and cross-chain sync. Integrates full Vesting functionality.
+ *         including SYMM token locking, unlock processes with cliff and vesting,
+ *         and merging. Integrates full Vesting functionality.
  *
  * @dev    Core features include:
  *         • SYMM token locking with burning and without burning (for MINTER_ROLE)
@@ -14,7 +14,6 @@ pragma solidity ^0.8.27;
  *         • Time-locked unlock functionality with cliff periods
  *         • Full Vesting functionality (linear vesting, penalties, percentage claims)
  *         • Unlock request management with unique ID tracking
- *         • Cross-chain synchronization capabilities
  *         • Transfer restrictions based on unlock status
  *         • Token minting capabilities for vesting operations
  *
@@ -67,9 +66,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 
 	/// @notice Role for minting NFTs without burning SYMM tokens.
 	bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-
-	/// @notice Role for synchronizing lock data on existing NFTs.
-	bytes32 public constant SYNC_ROLE = keccak256("SYNC_ROLE");
 
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
@@ -308,7 +304,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		_grantRole(UNPAUSER_ROLE, _admin);
 		_grantRole(OPERATOR_ROLE, _admin);
 		_grantRole(MINTER_ROLE, _admin);
-		_grantRole(SYNC_ROLE, _admin);
 	}
 
 	/* ────────────────────── Pausing Functions ────────────────────── */
@@ -659,26 +654,6 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 			SYMM.safeTransfer(user, lockedClaimed);
 			SYMM.safeTransfer(lockedClaimPenaltyReceiver, penalty);
 			emit LockedTokenClaimed(user, flowId, amount, penalty);
-		}
-	}
-
-	/* ───────────────────── Cross-Chain Sync Functions ───────────────────── */
-
-	/**
-	 * @notice Update lock data for multiple NFTs for cross-chain synchronization.
-	 * @param tokenIds  Array of token IDs to update.
-	 * @param lockDatas Array of lock data to apply.
-	 * @dev Every token must already exist. The NFT contract validates that each
-	 *      unlocking amount does not exceed its total amount.
-	 */
-	function batchUpdateLockData(
-		uint256[] calldata tokenIds,
-		ISymmioBuildersNft.LockData[] calldata lockDatas
-	) external onlyRole(SYNC_ROLE) whenNotPaused {
-		if (tokenIds.length != lockDatas.length) revert LengthMismatch();
-
-		for (uint256 i = 0; i < tokenIds.length; i++) {
-			nftContract.updateLockData(tokenIds[i], lockDatas[i].amount, lockDatas[i].unlockingAmount, lockDatas[i].name);
 		}
 	}
 
