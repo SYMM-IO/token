@@ -825,6 +825,44 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		for (uint256 i; i < length; ++i) totalClaimable += _flows[flowIds[i]].unlocked();
 	}
 
+	/**
+	 * @notice Get the number of active vesting flows owned by a user.
+	 * @param user Address of the flow beneficiary.
+	 * @return Number of active flows associated with `user`.
+	 * @dev Cleared flows are removed from the user's active-flow list and are not counted.
+	 */
+	function getUserFlowCount(address user) external view returns (uint256) {
+		return _userFlowIds[user].length;
+	}
+
+	/**
+	 * @notice Get a page of a user's active vesting flows and their IDs.
+	 * @param user Address of the flow beneficiary.
+	 * @param start Zero-based index of the first active flow to return.
+	 * @param size Maximum number of flows to return.
+	 * @return flowIds IDs corresponding to each returned flow.
+	 * @return flows Active vesting flow data corresponding to each returned ID.
+	 * @dev Returns empty arrays when `start` is outside the active-flow list or
+	 *      `size` is zero. Flow ordering can change when a flow is removed because
+	 *      active flow IDs are maintained using swap-and-pop.
+	 */
+	function getUserFlows(address user, uint256 start, uint256 size) external view returns (uint256[] memory flowIds, Flow[] memory flows) {
+		uint256[] storage userFlowIds = _userFlowIds[user];
+		uint256 total = userFlowIds.length;
+
+		if (start >= total || size == 0) return (new uint256[](0), new Flow[](0));
+
+		uint256 count = Math.min(size, total - start);
+		flowIds = new uint256[](count);
+		flows = new Flow[](count);
+
+		for (uint256 i; i < count; ++i) {
+			uint256 flowId = userFlowIds[start + i];
+			flowIds[i] = flowId;
+			flows[i] = _flows[flowId];
+		}
+	}
+
 	/* ───────────────────────── Internal Helpers ───────────────────────── */
 
 	/**
