@@ -154,10 +154,15 @@ contract SymmioBuildersNft is
 	 * @param unlockingAmount Portion of `amount` assigned to active unlock requests.
 	 * @param name          Name associated with the NFT.
 	 *
-	 * @dev Only callable by MINTER_ROLE. Preserves the original lock timestamp and
-	 *      requires `unlockingAmount` not to exceed `amount`.
+	 * @dev Only callable by MINTER_ROLE while the NFT is not paused. Preserves the
+	 *      original lock timestamp and requires `unlockingAmount` not to exceed `amount`.
 	 */
-	function updateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount, string memory name) external onlyRole(MINTER_ROLE) {
+	function updateLockData(
+		uint256 tokenId,
+		uint256 amount,
+		uint256 unlockingAmount,
+		string memory name
+	) external onlyRole(MINTER_ROLE) whenNotPaused {
 		_validateLockData(tokenId, amount, unlockingAmount);
 		lockData[tokenId] = ISymmioBuildersNft.LockData({
 			amount: amount,
@@ -223,18 +228,17 @@ contract SymmioBuildersNft is
 	/* ───────────────────────── Pause Controls ───────────────────────── */
 
 	/**
-	 * @notice Pause role-gated minting and burning operations.
+	 * @notice Pause minting, burning, lock-data updates, and transfers.
 	 * @dev Only callable by accounts with PAUSER_ROLE.
-	 *      Existing NFTs remain transferable unless transfers are separately paused.
 	 */
 	function pause() external onlyRole(PAUSER_ROLE) {
 		_pause();
 	}
 
 	/**
-	 * @notice Unpause role-gated minting and burning operations.
-	 * @dev Only callable by accounts with UNPAUSER_ROLE.
-	 *      This does not change the independent transfer pause state.
+	 * @notice Resume operations disabled by the global pause.
+	 * @dev Only callable by accounts with UNPAUSER_ROLE. This does not clear an
+	 *      independent transfer pause set through `pauseTransfers`.
 	 */
 	function unpause() external onlyRole(UNPAUSER_ROLE) {
 		_unpause();
@@ -258,6 +262,11 @@ contract SymmioBuildersNft is
 		emit TransfersPausedUpdated(false);
 	}
 
+	/// @inheritdoc ISymmioBuildersNft
+	function paused() public view override(PausableUpgradeable, ISymmioBuildersNft) returns (bool) {
+		return super.paused();
+	}
+
 	/* ───────────────────────── Internal Overrides ───────────────────────── */
 
 	/**
@@ -276,7 +285,7 @@ contract SymmioBuildersNft is
 		// Allow minting (from == address(0)) and burning (to == address(0))
 		// Only restrict actual transfers between addresses
 		if (from != address(0) && to != address(0)) {
-			if (transfersPaused) revert TransfersPaused();
+			if (paused() || transfersPaused) revert TransfersPaused();
 			if (lockData[tokenId].unlockingAmount > 0) revert TokenHasActiveUnlock();
 		}
 
@@ -305,7 +314,7 @@ contract SymmioBuildersNft is
 	function supportsInterface(
 		bytes4 interfaceId
 	) public view override(ERC721EnumerableUpgradeable, AccessControlEnumerableUpgradeable, IERC165) returns (bool) {
-		return super.supportsInterface(interfaceId);
+		return interfaceId == type(ISymmioBuildersNft).interfaceId || super.supportsInterface(interfaceId);
 	}
 
 	/**

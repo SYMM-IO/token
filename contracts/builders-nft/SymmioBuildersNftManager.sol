@@ -314,20 +314,23 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	/* ────────────────────── Pausing Functions ────────────────────── */
 
 	/**
-	 * @notice Pause user-facing locking, unlock, merge, and claim operations.
-	 * @dev Only callable by accounts with PAUSER_ROLE. Role administration,
-	 *      configuration setters, and cross-chain synchronization remain available.
+	 * @notice Atomically pause user-facing manager operations and all NFT mutations and transfers.
+	 * @dev Only callable by accounts with PAUSER_ROLE. The manager must hold the
+	 *      NFT contract's PAUSER_ROLE. Role administration and configuration setters remain available.
 	 */
 	function pause() external onlyRole(PAUSER_ROLE) {
 		_pause();
+		if (!nftContract.paused()) nftContract.pause();
 	}
 
 	/**
-	 * @notice Resume user-facing locking, unlock, merge, and claim operations.
-	 * @dev Only callable by accounts with UNPAUSER_ROLE.
+	 * @notice Atomically resume manager and NFT operations disabled by the system pause.
+	 * @dev Only callable by accounts with UNPAUSER_ROLE. The manager must hold the
+	 *      NFT contract's UNPAUSER_ROLE.
 	 */
 	function unpause() external onlyRole(UNPAUSER_ROLE) {
 		_unpause();
+		if (nftContract.paused()) nftContract.unpause();
 	}
 
 	/* ────────────────────── Core NFT & Locking Functions ────────────────────── */
@@ -666,10 +669,12 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param tokenIds  Array of token IDs to update.
 	 * @param lockDatas Array of lock data to apply.
 	 * @dev Every token must already exist. The NFT contract validates that each
-	 *      unlocking amount does not exceed its total amount. Synchronization is
-	 *      deliberately available while this manager is paused.
+	 *      unlocking amount does not exceed its total amount.
 	 */
-	function batchUpdateLockData(uint256[] calldata tokenIds, ISymmioBuildersNft.LockData[] calldata lockDatas) external onlyRole(SYNC_ROLE) {
+	function batchUpdateLockData(
+		uint256[] calldata tokenIds,
+		ISymmioBuildersNft.LockData[] calldata lockDatas
+	) external onlyRole(SYNC_ROLE) whenNotPaused {
 		if (tokenIds.length != lockDatas.length) revert LengthMismatch();
 
 		for (uint256 i = 0; i < tokenIds.length; i++) {

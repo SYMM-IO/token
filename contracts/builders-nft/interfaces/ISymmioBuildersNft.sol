@@ -44,4 +44,14 @@ interface ISymmioBuildersNft is IERC721 {
 	/// @param name New brand name associated with the NFT.
 	/// @dev Implementations are expected to restrict this function to the manager or an equivalent trusted role.
 	function updateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount, string memory name) external;
+
+	/// @notice Pauses NFT minting, burning, lock-data updates, and transfers.
+	function pause() external;
+
+	/// @notice Resumes NFT operations disabled by the system pause.
+	function unpause() external;
+
+	/// @notice Returns whether the NFT is globally paused.
+	/// @return Whether the NFT is paused.
+	function paused() external view returns (bool);
 }

@@ -1,58 +1,12 @@
-import { shouldBehaveLikeSymmAllocationClaimer } from "./symmAllocationClaimer.behavior"
-import { shouldBehaveLikeSymmioToken } from "./symmioToken.behavior"
-import { shouldBehaveLikeSymmStaking } from "./symmStaking.behavior"
-import { shouldBehaveLikeSymmVesting } from "./symmVesting.behavior"
-import { ShouldBehaveLikeVesting } from "./vesting.behavior"
-import { shouldBehaveLikeSymmVestingPlanInitializer} from "./symmVestingPlanInitializer.behavior"
-import { ShouldBehaveLikeVestingV2 } from "./vestingV2.behavior";
-import { shouldBehaveLikeSymmioBuildersNft } from "./symmioBuildersNft.behavior";
-import { shouldBehaveLikeSymmioBuildersNftManager } from "./symmioBuildersNftManager.behavior";
+import { shouldBehaveLikeSymmioBuildersNft } from "./symmioBuildersNft.behavior"
+import { shouldBehaveLikeSymmioBuildersNftManager } from "./symmioBuildersNftManager.behavior"
 
-describe("Symmio Token", () => {
-	// if (process.env.TEST_MODE === "static") {
-		describe("Static Tests", async function () {
-			// describe("Symm token", async function () {
-			// 	shouldBehaveLikeSymmioToken()
-			// })
+describe("Symmio Builders NFT system", () => {
+	describe("SymmioBuildersNft", () => {
+		shouldBehaveLikeSymmioBuildersNft()
+	})
 
-			// describe("Allocation Claimer", async function () {
-			// 	shouldBehaveLikeSymmAllocationClaimer()
-			// })
-
-			// describe("Airdrop Helper", async function () {
-			// 	shouldBehaveLikeAirdropHelper() // Not adapted
-			// })
-
-			// describe("Symm Staking", async function () {
-			// 	shouldBehaveLikeSymmStaking()
-			// })
-
-			// describe("Vesting", async function () {
-			// 	ShouldBehaveLikeVesting()
-			// })
-
-			// describe("Symm Vesting Plan Initializer", async function () {
-			// 	shouldBehaveLikeSymmVestingPlanInitializer()
-			// })
-
-			// describe("Vesting V2", async function () {
-			// 	ShouldBehaveLikeVestingV2()
-			// })
-
-			// describe("Symmio Builders Nft", async function () {
-			// 	shouldBehaveLikeSymmioBuildersNft()
-			// })
-
-			describe("Symmio Builders Nft Manager", async function () {
-				shouldBehaveLikeSymmioBuildersNftManager()
-			})
-		})
-	// } else if (process.env.TEST_MODE === "dynamic") {
-		// Dynamic tests
-		// describe("Dynamic Tests", async function () {
-		// 	describe("Symm Vesting", async function () {
-		// 		shouldBehaveLikeSymmVesting()
-		// 	})
-		// })
-	// }
+	describe("SymmioBuildersNftManager", () => {
+		shouldBehaveLikeSymmioBuildersNftManager()
+	})
 })
