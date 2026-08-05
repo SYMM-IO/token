@@ -136,6 +136,44 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		uint256 netClaimedAmount;
 	}
 
+	/**
+	 * @notice Flat frontend-ready data for one unlock request associated with an NFT.
+	 * @param unlockRequestId    ID of the unlock request.
+	 * @param amount             Original amount assigned to the request.
+	 * @param unlockInitiatedTime Timestamp when unlocking was initiated.
+	 * @param cliffEndTime       Timestamp at which the request's cliff ends.
+	 * @param vestingFlowId      ID of the vesting flow created for the request.
+	 * @param vestingStartTime   Timestamp at which vesting starts.
+	 * @param vestingEndTime     Timestamp at which vesting ends.
+	 * @param lockedAmount       Amount still unvested in the active flow.
+	 * @param claimableAmount    Amount currently vested and claimable without penalty.
+	 * @param netClaimedAmount   Cumulative amount received by the beneficiary after penalties.
+	 */
+	struct UnlockRequestDetails {
+		uint256 unlockRequestId;
+		uint256 amount;
+		uint256 unlockInitiatedTime;
+		uint256 cliffEndTime;
+		uint256 vestingFlowId;
+		uint256 vestingStartTime;
+		uint256 vestingEndTime;
+		uint256 lockedAmount;
+		uint256 claimableAmount;
+		uint256 netClaimedAmount;
+	}
+
+	/**
+	 * @notice Frontend-ready owner and unlock history for an NFT.
+	 * @param tokenId        Queried NFT ID.
+	 * @param owner          Current NFT owner, or zero if the NFT was burned.
+	 * @param unlockRequests Flat unlock request history for the NFT.
+	 */
+	struct TokenDetails {
+		uint256 tokenId;
+		address owner;
+		UnlockRequestDetails[] unlockRequests;
+	}
+
 	/* ─────────────────────────────── Events ─────────────────────────────── */
 
 	/**
@@ -719,24 +757,68 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	/**
 	 * @notice Get unlock requests for a specific NFT.
 	 * @param tokenId ID of the NFT to query.
-	 * @param start  Start index.
-	 * @param end    End index.
-	 * @param size   Maximum number of requests to return.
+	 * @param start   Zero-based index of the first request to return.
+	 * @param size    Maximum number of requests to return.
 	 * @return Array of unlock requests.
 	 */
-	function getUnlockedRequests(uint256 tokenId, uint256 start, uint256 end, uint256 size) external view returns (UnlockRequest[] memory) {
-		uint256[] memory unlockIds = tokenUnlockIds[tokenId];
+	function getUnlockedRequests(uint256 tokenId, uint256 start, uint256 size) external view returns (UnlockRequest[] memory) {
+		uint256[] storage unlockIds = tokenUnlockIds[tokenId];
 		uint256 total = unlockIds.length;
 
-		if (end > total) end = total;
-		if (start > end) start = end;
+		if (start >= total || size == 0) return new UnlockRequest[](0);
 
-		uint256 count = end - start;
-		if (count > size) count = size;
+		uint256 count = Math.min(size, total - start);
 
 		UnlockRequest[] memory requests = new UnlockRequest[](count);
-		for (uint256 i = 0; i < count; i++) requests[i] = unlockRequests[unlockIds[start + i]];
+		for (uint256 i; i < count; ++i) requests[i] = unlockRequests[unlockIds[start + i]];
 		return requests;
+	}
+
+	/**
+	 * @notice Get an NFT's owner and flat unlock/vesting history in one call.
+	 * @param tokenId ID of the NFT to query.
+	 * @return details Current owner and complete non-cancelled unlock history.
+	 * @dev Burned NFTs return a zero owner while preserving their unlock history.
+	 */
+	function getTokenDetails(uint256 tokenId) external view returns (TokenDetails memory details) {
+		details.tokenId = tokenId;
+
+		try nftContract.ownerOf(tokenId) returns (address owner) {
+			details.owner = owner;
+		} catch {}
+
+		uint256[] storage unlockIds = tokenUnlockIds[tokenId];
+		uint256 requestCount = unlockIds.length;
+		details.unlockRequests = new UnlockRequestDetails[](requestCount);
+
+		for (uint256 i; i < requestCount; ++i) {
+			uint256 unlockId = unlockIds[i];
+			UnlockRequest memory request = unlockRequests[unlockId];
+			uint256 cliffEndTime = request.vestingStartTime != 0 ? request.vestingStartTime : request.unlockInitiatedTime + cliffDuration;
+			uint256 lockedAmount;
+			uint256 claimableAmount;
+
+			if (request.vestingStartTime != 0) {
+				Flow storage flow = _flows[request.vestingFlowId];
+				if (flow.amount != 0) {
+					claimableAmount = flow.unlocked();
+					lockedAmount = flow.amount - claimableAmount;
+				}
+			}
+
+			details.unlockRequests[i] = UnlockRequestDetails({
+				unlockRequestId: unlockId,
+				amount: request.amount,
+				unlockInitiatedTime: request.unlockInitiatedTime,
+				cliffEndTime: cliffEndTime,
+				vestingFlowId: request.vestingFlowId,
+				vestingStartTime: request.vestingStartTime,
+				vestingEndTime: request.vestingEndTime,
+				lockedAmount: lockedAmount,
+				claimableAmount: claimableAmount,
+				netClaimedAmount: request.netClaimedAmount
+			});
+		}
 	}
 
 	/**

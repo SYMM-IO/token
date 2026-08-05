@@ -161,6 +161,62 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 	})
 
 	describe("vesting claims and views", () => {
+		it("returns frontend-ready NFT, unlock, and vesting details", async () => {
+			const tokenAmount = minLockAmount * 2n
+			const firstUnlockAmount = minLockAmount
+			const secondUnlockAmount = minLockAmount / 2n
+			await manager.connect(admin).mintWithoutBurn(user1.address, tokenAmount, brand)
+			await manager.connect(user1).initiateUnlock(0, firstUnlockAmount)
+			await manager.connect(user1).initiateUnlock(0, secondUnlockAmount)
+			await time.increase(Number(cliffDuration) + 1)
+			await manager.connect(user1).completeCliffAndStartVesting(0)
+			await time.increase(Number(vestingDuration / 4n))
+
+			const details = await manager.getTokenDetails(0)
+			expect(details.tokenId).to.equal(0)
+			expect(details.owner).to.equal(user1.address)
+			expect(details.unlockRequests).to.have.length(2)
+
+			const startedRequest = details.unlockRequests[0]
+			expect(startedRequest.unlockRequestId).to.equal(0)
+			expect(startedRequest.amount).to.equal(firstUnlockAmount)
+			expect(startedRequest.unlockInitiatedTime).to.be.greaterThan(0)
+			expect(startedRequest.cliffEndTime).to.equal(startedRequest.vestingStartTime)
+			expect(startedRequest.vestingFlowId).to.equal(0)
+			expect(startedRequest.vestingStartTime).to.be.greaterThan(0)
+			expect(startedRequest.vestingEndTime).to.equal(startedRequest.vestingStartTime + vestingDuration)
+			expect(startedRequest.lockedAmount + startedRequest.claimableAmount).to.equal(firstUnlockAmount)
+			expect(startedRequest.netClaimedAmount).to.equal(0)
+
+			const pendingRequest = details.unlockRequests[1]
+			expect(pendingRequest.unlockRequestId).to.equal(1)
+			expect(pendingRequest.amount).to.equal(secondUnlockAmount)
+			expect(pendingRequest.cliffEndTime).to.equal(pendingRequest.unlockInitiatedTime + cliffDuration)
+			expect(pendingRequest.vestingFlowId).to.equal(0)
+			expect(pendingRequest.vestingStartTime).to.equal(0)
+			expect(pendingRequest.vestingEndTime).to.equal(0)
+			expect(pendingRequest.lockedAmount).to.equal(0)
+			expect(pendingRequest.claimableAmount).to.equal(0)
+			expect(pendingRequest.netClaimedAmount).to.equal(0)
+
+			const page = await manager.getUnlockedRequests(0, 1, 10)
+			expect(page).to.have.length(1)
+			expect(page[0].amount).to.equal(secondUnlockAmount)
+			expect(await manager.getUnlockedRequests(0, 2, 10)).to.have.length(0)
+		})
+
+		it("preserves unlock and vesting details after the NFT is burned", async () => {
+			await createFlow(user1, 0n, 0n, minLockAmount)
+
+			const details = await manager.getTokenDetails(0)
+			expect(details.tokenId).to.equal(0)
+			expect(details.owner).to.equal(ethers.ZeroAddress)
+			expect(details.unlockRequests).to.have.length(1)
+			expect(details.unlockRequests[0].vestingStartTime).to.be.greaterThan(0)
+			expect(details.unlockRequests[0].vestingEndTime).to.be.greaterThan(details.unlockRequests[0].vestingStartTime)
+			expect(details.unlockRequests[0].lockedAmount + details.unlockRequests[0].claimableAmount).to.equal(minLockAmount)
+		})
+
 		it("preserves principal across repeated partial claims (BNF-01 regression)", async () => {
 			const amount = minLockAmount
 			const flowId = await createFlow(user1, 0n, 0n, amount)
