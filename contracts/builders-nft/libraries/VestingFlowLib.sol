@@ -48,8 +48,8 @@ library VestingFlowLib {
 			clear(self);
 			return true;
 		}
-		self.startTime = ts;
 		self.amount -= unlocked(self);
+		self.startTime = ts;
 		return false;
 	}
 
