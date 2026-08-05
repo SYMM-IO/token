@@ -6,8 +6,9 @@ pragma solidity ^0.8.27;
  * @notice A simple ERC721 NFT contract for Symmio Builders with brand name customization.
  *         All complex logic is handled by the SymmioBuildersNftManager contract.
  *
- * @dev    This contract focuses solely on NFT minting, transfers, and brand name management.
- *         The manager contract handles all lock data, unlock processes, and fee management.
+ * @dev    This contract stores per-token lock metadata and enforces transfer restrictions.
+ *         The manager contract is expected to receive the minting and burning roles and
+ *         to coordinate locking, unlock requests, vesting, and lock-data updates.
  */
 
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
@@ -43,10 +44,10 @@ contract SymmioBuildersNft is
 	/// @notice Counter for generating unique token IDs sequentially.
 	uint256 private _tokenIdCounter;
 
-	/// @notice Whether transfers are paused.
+	/// @notice Whether address-to-address NFT transfers are independently paused.
 	bool public transfersPaused;
 
-	/// @notice Mapping of token ID to its lock data.
+	/// @notice Lock metadata keyed by token ID.
 	mapping(uint256 => ISymmioBuildersNft.LockData) internal lockData;
 
 	/// @dev This empty reserved space is put in place to allow future versions to add new variables without shifting down storage in the inheritance chain.
@@ -58,7 +59,7 @@ contract SymmioBuildersNft is
 	 * @notice Emitted when an NFT is minted.
 	 * @param to        Address receiving the NFT.
 	 * @param tokenId   ID of the minted NFT.
-	 * @param amount    Amount of SYMM tokens locked.
+	 * @param amount    Amount of SYMM tokens represented by the NFT.
 	 * @param name      Name associated with the NFT.
 	 */
 	event NFTMinted(address indexed to, uint256 indexed tokenId, uint256 amount, string name);
@@ -89,15 +90,17 @@ contract SymmioBuildersNft is
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
 	/// @custom:oz-upgrades-unsafe-allow constructor
+	/// @dev Locks the implementation contract against direct initialization.
 	constructor() {
 		_disableInitializers();
 	}
 
 	/**
 	 * @notice Initialize the upgradeable SymmioBuildersNft contract.
-	 * @param _admin   Address to receive admin and all role assignments.
+	 * @param _admin Address to receive the admin, pauser, and unpauser roles.
 	 *
-	 * @dev Sets up the ERC721 contract and assigns roles.
+	 * @dev Sets up the ERC721 contract and grants the admin, pauser, and unpauser
+	 *      roles. MINTER_ROLE and BURNER_ROLE must be granted separately.
 	 */
 	function initialize(address _admin) public initializer {
 		if (_admin == address(0)) revert ZeroAddress();
@@ -119,7 +122,7 @@ contract SymmioBuildersNft is
 	/**
 	 * @notice Mint a new NFT with a brand name.
 	 * @param to        Address to mint the NFT to.
-	 * @param amount    Amount of SYMM tokens to lock.
+	 * @param amount    Initial SYMM amount represented by the NFT.
 	 * @param name      Name for the NFT.
 	 * @return tokenId  ID of the newly minted NFT.
 	 *
@@ -148,9 +151,11 @@ contract SymmioBuildersNft is
 	 * @notice Update the lock data of an NFT.
 	 * @param tokenId       ID of the NFT to update.
 	 * @param amount        Amount of SYMM tokens locked.
+	 * @param unlockingAmount Portion of `amount` assigned to active unlock requests.
 	 * @param name          Name associated with the NFT.
 	 *
-	 * @dev Only callable by the NFT owner.
+	 * @dev Only callable by MINTER_ROLE. Preserves the original lock timestamp and
+	 *      requires `unlockingAmount` not to exceed `amount`.
 	 */
 	function updateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount, string memory name) external onlyRole(MINTER_ROLE) {
 		_validateLockData(tokenId, amount, unlockingAmount);
@@ -218,23 +223,25 @@ contract SymmioBuildersNft is
 	/* ───────────────────────── Pause Controls ───────────────────────── */
 
 	/**
-	 * @notice Pause the contract, disabling minting and transfers.
+	 * @notice Pause role-gated minting and burning operations.
 	 * @dev Only callable by accounts with PAUSER_ROLE.
+	 *      Existing NFTs remain transferable unless transfers are separately paused.
 	 */
 	function pause() external onlyRole(PAUSER_ROLE) {
 		_pause();
 	}
 
 	/**
-	 * @notice Unpause the contract, enabling minting and transfers.
+	 * @notice Unpause role-gated minting and burning operations.
 	 * @dev Only callable by accounts with UNPAUSER_ROLE.
+	 *      This does not change the independent transfer pause state.
 	 */
 	function unpause() external onlyRole(UNPAUSER_ROLE) {
 		_unpause();
 	}
 
 	/**
-	 * @notice Pause the contract, disabling transfers.
+	 * @notice Disable address-to-address NFT transfers.
 	 * @dev Only callable by accounts with PAUSER_ROLE.
 	 */
 	function pauseTransfers() external onlyRole(PAUSER_ROLE) {
@@ -243,7 +250,7 @@ contract SymmioBuildersNft is
 	}
 
 	/**
-	 * @notice Unpause the contract, enabling transfers.
+	 * @notice Enable address-to-address NFT transfers.
 	 * @dev Only callable by accounts with UNPAUSER_ROLE.
 	 */
 	function unpauseTransfers() external onlyRole(UNPAUSER_ROLE) {
@@ -254,13 +261,13 @@ contract SymmioBuildersNft is
 	/* ───────────────────────── Internal Overrides ───────────────────────── */
 
 	/**
-	 * @dev Override ERC721 update function to enforce transfer restrictions.
+	 * @dev Overrides the ERC721 update hook to enforce transfer restrictions.
 	 * @param to      Address to transfer to (address(0) for burns).
 	 * @param tokenId ID of the NFT being updated.
 	 * @param auth    Address authorized for the update.
-	 * @return        Address of the previous owner.
+	 * @return Address of the previous owner.
 	 *
-	 * @dev Prevents transfers if paused or if the NFT has an active unlock process.
+	 * Prevents transfers if independently paused or if the NFT has an active unlock process.
 	 *      Allows minting (from == address(0)) and burning (to == address(0)).
 	 */
 	function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address) {
@@ -276,6 +283,13 @@ contract SymmioBuildersNft is
 		return super._update(to, tokenId, auth);
 	}
 
+	/**
+	 * @dev Verifies that `tokenId` exists and its unlocking amount is not greater
+	 *      than its total locked amount.
+	 * @param tokenId Token whose lock data is being validated.
+	 * @param amount Total amount represented by the token.
+	 * @param unlockingAmount Portion assigned to active unlock requests.
+	 */
 	function _validateLockData(uint256 tokenId, uint256 amount, uint256 unlockingAmount) internal view {
 		_requireOwned(tokenId);
 		if (unlockingAmount > amount) revert InvalidLockData();
