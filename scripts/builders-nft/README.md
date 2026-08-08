@@ -23,12 +23,9 @@ Copy or edit `config/builders-nft.base.json`. The known live contract and signer
 - `penaltyRate`: 18-decimal fixed point, where `100000000000000000` is 10%.
 - `penaltyReceiver`: receives early-claim penalties.
 
-The config deliberately has an empty `upgrade.acceptedRemovedFunctions`. The current source changes `lockData` from public to internal, removing `lockData(uint256)` from the old ABI. `upgradeNft.ts` refuses to deploy or upgrade until either:
+The current source is the rollout source of truth: `lockData` is intentionally internal, while `getLockData(uint256)` is the supported external getter. The config therefore lists `"lockData(uint256)"` in `upgrade.acceptedRemovedFunctions` as an explicit acknowledgement that the compiler-generated legacy getter is removed.
 
-1. the public getter is restored in the contract, or
-2. `"lockData(uint256)"` is added to `acceptedRemovedFunctions` as an explicit rollout decision.
-
-That acceptance only acknowledges an ABI removal. The independent storage-layout comparison must still pass.
+That acceptance only acknowledges the ABI removal. It does not bypass the independent storage-layout comparison, runtime bytecode checks, or the pre/post-upgrade NFT state snapshot.
 
 Set the config path for every command:
 

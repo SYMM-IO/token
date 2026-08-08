@@ -33,7 +33,7 @@
 		}
 	},
 	"upgrade": {
-		"acceptedRemovedFunctions": []
+		"acceptedRemovedFunctions": ["lockData(uint256)"]
 	},
 	"manager": {
 		"admin": null,

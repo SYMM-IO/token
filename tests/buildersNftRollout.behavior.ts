@@ -70,6 +70,7 @@ describe("Builders NFT rollout tooling", () => {
 
 	it("requires every economic and authority value before manager deployment", () => {
 		const { config } = loadRolloutConfig(configFile)
+		expect(config.upgrade.acceptedRemovedFunctions).to.deep.equal(["lockData(uint256)"])
 		expect(() => requireManagerDeploymentConfig(config)).to.throw("manager.penaltyRate")
 	})
 
