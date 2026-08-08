@@ -53,7 +53,7 @@ export const config: HardhatUserConfig = {
 			accounts: accounts_list,
 		},
 		base: {
-			url: "https://base.llamarpc.com",
+			url: process.env.RPC_BASE || "https://base.llamarpc.com",
 			accounts: accounts_list,
 		},
 		polygon: {

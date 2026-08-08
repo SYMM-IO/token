@@ -1,0 +1,157 @@
+{
+	"schemaVersion": 1,
+	"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+	"runtimeCodeHash": "0x7150e8ce366a5011a5000de2abaea14de6bc40732c60a29551a3408f6f1995c7",
+	"functions": [
+		{ "signature": "approve(address,uint256)", "outputs": [] },
+		{ "signature": "balanceOf(address)", "outputs": ["uint256"] },
+		{ "signature": "burn(uint256)", "outputs": [] },
+		{ "signature": "BURNER_ROLE()", "outputs": ["bytes32"] },
+		{ "signature": "DEFAULT_ADMIN_ROLE()", "outputs": ["bytes32"] },
+		{ "signature": "getApproved(uint256)", "outputs": ["address"] },
+		{ "signature": "getEffectiveLockedAmount(uint256)", "outputs": ["uint256"] },
+		{ "signature": "getLockData(uint256)", "outputs": ["(uint256,uint256,uint256,string)"] },
+		{ "signature": "getRoleAdmin(bytes32)", "outputs": ["bytes32"] },
+		{ "signature": "getRoleMember(bytes32,uint256)", "outputs": ["address"] },
+		{ "signature": "getRoleMemberCount(bytes32)", "outputs": ["uint256"] },
+		{ "signature": "getRoleMembers(bytes32)", "outputs": ["address[]"] },
+		{ "signature": "getUserTokenIds(address)", "outputs": ["uint256[]"] },
+		{ "signature": "getUserTotalLocked(address)", "outputs": ["uint256"] },
+		{ "signature": "grantRole(bytes32,address)", "outputs": [] },
+		{ "signature": "hasRole(bytes32,address)", "outputs": ["bool"] },
+		{ "signature": "initialize(address)", "outputs": [] },
+		{ "signature": "isApprovedForAll(address,address)", "outputs": ["bool"] },
+		{ "signature": "lockData(uint256)", "outputs": ["uint256", "uint256", "uint256", "string"] },
+		{ "signature": "mint(address,uint256,string)", "outputs": ["uint256"] },
+		{ "signature": "MINTER_ROLE()", "outputs": ["bytes32"] },
+		{ "signature": "name()", "outputs": ["string"] },
+		{ "signature": "ownerOf(uint256)", "outputs": ["address"] },
+		{ "signature": "pause()", "outputs": [] },
+		{ "signature": "paused()", "outputs": ["bool"] },
+		{ "signature": "PAUSER_ROLE()", "outputs": ["bytes32"] },
+		{ "signature": "pauseTransfers()", "outputs": [] },
+		{ "signature": "renounceRole(bytes32,address)", "outputs": [] },
+		{ "signature": "revokeRole(bytes32,address)", "outputs": [] },
+		{ "signature": "safeTransferFrom(address,address,uint256,bytes)", "outputs": [] },
+		{ "signature": "safeTransferFrom(address,address,uint256)", "outputs": [] },
+		{ "signature": "setApprovalForAll(address,bool)", "outputs": [] },
+		{ "signature": "supportsInterface(bytes4)", "outputs": ["bool"] },
+		{ "signature": "symbol()", "outputs": ["string"] },
+		{ "signature": "tokenByIndex(uint256)", "outputs": ["uint256"] },
+		{ "signature": "tokenOfOwnerByIndex(address,uint256)", "outputs": ["uint256"] },
+		{ "signature": "tokenURI(uint256)", "outputs": ["string"] },
+		{ "signature": "totalSupply()", "outputs": ["uint256"] },
+		{ "signature": "transferFrom(address,address,uint256)", "outputs": [] },
+		{ "signature": "transfersPaused()", "outputs": ["bool"] },
+		{ "signature": "unpause()", "outputs": [] },
+		{ "signature": "UNPAUSER_ROLE()", "outputs": ["bytes32"] },
+		{ "signature": "unpauseTransfers()", "outputs": [] },
+		{ "signature": "updateLockData(uint256,uint256,uint256,string)", "outputs": [] },
+		{ "signature": "version()", "outputs": ["string"] }
+	],
+	"storageLayout": {
+		"storage": [
+			{
+				"astId": 10883,
+				"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+				"label": "_tokenIdCounter",
+				"offset": 0,
+				"slot": "0",
+				"type": "t_uint256"
+			},
+			{
+				"astId": 10886,
+				"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+				"label": "transfersPaused",
+				"offset": 0,
+				"slot": "1",
+				"type": "t_bool"
+			},
+			{
+				"astId": 10892,
+				"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+				"label": "lockData",
+				"offset": 0,
+				"slot": "2",
+				"type": "t_mapping(t_uint256,t_struct(LockData)13012_storage)"
+			},
+			{
+				"astId": 10897,
+				"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+				"label": "__gap",
+				"offset": 0,
+				"slot": "3",
+				"type": "t_array(t_uint256)50_storage"
+			}
+		],
+		"types": {
+			"t_array(t_uint256)50_storage": {
+				"base": "t_uint256",
+				"encoding": "inplace",
+				"label": "uint256[50]",
+				"numberOfBytes": "1600"
+			},
+			"t_bool": {
+				"encoding": "inplace",
+				"label": "bool",
+				"numberOfBytes": "1"
+			},
+			"t_mapping(t_uint256,t_struct(LockData)13012_storage)": {
+				"encoding": "mapping",
+				"key": "t_uint256",
+				"label": "mapping(uint256 => struct ISymmioBuildersNft.LockData)",
+				"numberOfBytes": "32",
+				"value": "t_struct(LockData)13012_storage"
+			},
+			"t_string_storage": {
+				"encoding": "bytes",
+				"label": "string",
+				"numberOfBytes": "32"
+			},
+			"t_struct(LockData)13012_storage": {
+				"encoding": "inplace",
+				"label": "struct ISymmioBuildersNft.LockData",
+				"members": [
+					{
+						"astId": 13005,
+						"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+						"label": "amount",
+						"offset": 0,
+						"slot": "0",
+						"type": "t_uint256"
+					},
+					{
+						"astId": 13007,
+						"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+						"label": "lockTimestamp",
+						"offset": 0,
+						"slot": "1",
+						"type": "t_uint256"
+					},
+					{
+						"astId": 13009,
+						"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+						"label": "unlockingAmount",
+						"offset": 0,
+						"slot": "2",
+						"type": "t_uint256"
+					},
+					{
+						"astId": 13011,
+						"contract": "contracts/builders-nft/SymmioBuildersNft.sol:SymmioBuildersNft",
+						"label": "name",
+						"offset": 0,
+						"slot": "3",
+						"type": "t_string_storage"
+					}
+				],
+				"numberOfBytes": "128"
+			},
+			"t_uint256": {
+				"encoding": "inplace",
+				"label": "uint256",
+				"numberOfBytes": "32"
+			}
+		}
+	}
+}

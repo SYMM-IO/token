@@ -26,3 +26,7 @@ error.log
 
 scripts/uv.lock
 scripts/.venv
+
+# Builders NFT rollout runtime artifacts
+/scripts/builders-nft/state/*.json
+/scripts/builders-nft/output/*.json

@@ -1,0 +1,52 @@
+{
+	"schemaVersion": 1,
+	"network": {
+		"name": "base",
+		"chainId": 8453
+	},
+	"files": {
+		"state": "../state/builders-nft.base.json",
+		"storageBaseline": "./symmio-builders-nft-v1.baseline.json",
+		"roleTransactions": "../output/builders-nft-role-transactions.base.json"
+	},
+	"contracts": {
+		"symm": "0x800822d361335b4d5F352Dac293cA4128b5B605f",
+		"buildersNftProxy": "0x573316D53C6A6685163ba6a602F7c1f20A8E03D2",
+		"expectedBuildersNftImplementation": "0x7c534b21db7402322141c5f0fb9ec43cc624afb4",
+		"expectedBuildersNftProxyAdmin": "0x14561bba385c87beddcbc0bf2c0a456bc7995a57",
+		"expectedBuildersNftProxyAdminOwner": "0xf12239317e985f6772f86407608b166efa3e2f05",
+		"expectedSymmAdmin": "0x8CF65060CdA270a3886452A1A1cb656BECEE5bA4"
+	},
+	"signers": {
+		"deployer": {
+			"address": "0x00c2796b3AD3369D604E009D75204D7a15Cc584b"
+		},
+		"nftProxyAdminOwner": {
+			"address": "0xf12239317e985f6772f86407608b166efa3e2f05"
+		}
+	},
+	"ledger": {
+		"scan": {
+			"accountCount": 10,
+			"addressCount": 20,
+			"extraPaths": []
+		}
+	},
+	"upgrade": {
+		"acceptedRemovedFunctions": []
+	},
+	"manager": {
+		"admin": null,
+		"proxyAdminOwner": null,
+		"minLockAmount": null,
+		"cliffDuration": null,
+		"vestingDuration": null,
+		"penaltyRate": null,
+		"penaltyReceiver": null
+	},
+	"roles": {
+		"timelockPredecessor": "0x0000000000000000000000000000000000000000000000000000000000000000",
+		"timelockSaltLabel": "symmio-builders-nft-manager-minter-v1",
+		"logScanChunkSize": 50000
+	}
+}
