@@ -126,23 +126,23 @@ contract SymmVestingPlanInitializer is AccessControlEnumerable, Pausable {
 	// =============================================================
 
 	/**
-   * @notice Calculates the end time for new vesting schedules.
-   * @dev Launch day has weight 0 penalty, full duration. Each day after increases duration linearly.
-   */
+	 * @notice Calculates the end time for new vesting schedules.
+	 * @dev Launch day has weight 0 penalty, full duration. Each day after increases duration linearly.
+	 */
 	function endTimeStartsAt(uint256 _timestamp) external view returns (uint256) {
 		return _endTime(_timestamp);
 	}
 
 	/**
-     * @notice Calculates the end time for new vesting schedules.
-   * @dev Launch day has weight 0 penalty, full duration. Each day after increases duration linearly.
-   */
+	 * @notice Calculates the end time for new vesting schedules.
+	 * @dev Launch day has weight 0 penalty, full duration. Each day after increases duration linearly.
+	 */
 	function endTime() external view returns (uint256) {
 		return _endTime(block.timestamp);
 	}
 
 	function _endTime(uint256 _timestamp) internal view returns (uint256) {
-		if(_timestamp >= VESTING_DURATION + launchDay){
+		if (_timestamp >= VESTING_DURATION + launchDay) {
 			return _timestamp + 14 days;
 		}
 		uint256 today = (_timestamp / 1 days) * 1 days;

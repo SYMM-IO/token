@@ -50,7 +50,7 @@ contract AirdropHelper is Ownable2Step {
 		if (recipients.length != amounts.length) revert ArrayLengthMismatch();
 		if (recipients.length == 0) revert EmptyArrays();
 
-		for (uint256 i = 0; i < recipients.length; ) {
+		for (uint256 i = 0; i < recipients.length;) {
 			if (recipients[i] == address(0)) revert InvalidRecipient();
 			if (amounts[i] == 0) revert InvalidAmount();
 
@@ -93,7 +93,7 @@ contract AirdropHelper is Ownable2Step {
 
 		uint256 batchAmount;
 
-		for (uint256 i = nextAirdropIndex; i < endIndex; ) {
+		for (uint256 i = nextAirdropIndex; i < endIndex;) {
 			SYMM_TOKEN.safeTransfer(_airdropRecipients[i], _airdropAmounts[i]);
 			batchAmount += _airdropAmounts[i];
 

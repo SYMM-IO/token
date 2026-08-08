@@ -1,29 +1,21 @@
-import { task } from "hardhat/config";
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { ethers, upgrades } from "hardhat";
+import { task } from "hardhat/config"
+import { HardhatRuntimeEnvironment } from "hardhat/types"
 
 task("deploy:SymmioBuildersNft", "Deploys the SymmioBuildersNft contract")
-	.setAction(async ({}, {
-			ethers,
-			upgrades,
-		}: HardhatRuntimeEnvironment) => {
-			console.log("deploy:SymmioBuildersNft");
+	.addParam("admin", "Address receiving the NFT admin and pause roles")
+	.setAction(async ({ admin }, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
+		if (!ethers.isAddress(admin) || admin === ethers.ZeroAddress) throw new Error("Invalid NFT admin address")
 
-			const signers = await ethers.getSigners();
-			const admin = signers[0];
+		console.log("deploy:SymmioBuildersNft")
+		console.log(`Admin: ${admin}`)
 
-			const symmioBuildersNft = await ethers.getContractFactory("SymmioBuildersNft");
+		const factory = await ethers.getContractFactory("SymmioBuildersNft")
+		const contract = await upgrades.deployProxy(factory, [admin], { initializer: "initialize" })
+		await contract.waitForDeployment()
 
-			const contract = await upgrades.deployProxy(symmioBuildersNft, [admin.address], { initializer: "initialize" });
-			await contract.waitForDeployment();
-
-			const implDeployTx = await symmioBuildersNft.getDeployTransaction();
-			const implBytecode = implDeployTx.data;
-			if (!implBytecode) {
-				throw new Error("Cannot obtain implementation deployment bytecode");
-			}
-
-			console.log(`symmioBuildersNft Contract deployed at ${await contract.getAddress()}`);
-			return contract;
-		},
-	);
+		const proxyAddress = await contract.getAddress()
+		const implementationAddress = await upgrades.erc1967.getImplementationAddress(proxyAddress)
+		console.log(`SymmioBuildersNft proxy: ${proxyAddress}`)
+		console.log(`SymmioBuildersNft implementation: ${implementationAddress}`)
+		return contract
+	})

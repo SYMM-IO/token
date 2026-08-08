@@ -1,5 +1,5 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { ethers, run } from "hardhat";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
+import { ethers, run } from "hardhat"
 import {
 	SymmAllocationClaimer,
 	Symmio,
@@ -8,7 +8,7 @@ import {
 	SymmStaking,
 	SymmVestingPlanInitializer,
 	VestingV2,
-} from "../typechain-types";
+} from "../typechain-types"
 
 export class RunContext {
 	signers!: {
@@ -19,19 +19,19 @@ export class RunContext {
 		user3: SignerWithAddress
 		symmioFoundation: SignerWithAddress
 		vestingPenaltyReceiver: SignerWithAddress
-	};
-	symmioToken!: Symmio;
-	claimSymm!: SymmAllocationClaimer;
-	vesting!: VestingV2;
-	symmStaking!: SymmStaking;
-	symmVestingVlanInitializer!: SymmVestingPlanInitializer;
-	symmioBuildersNft!: SymmioBuildersNft;
-	symmioBuildersNftManager!: SymmioBuildersNftManager;
+	}
+	symmioToken!: Symmio
+	claimSymm!: SymmAllocationClaimer
+	vesting!: VestingV2
+	symmStaking!: SymmStaking
+	symmVestingVlanInitializer!: SymmVestingPlanInitializer
+	symmioBuildersNft!: SymmioBuildersNft
+	symmioBuildersNftManager!: SymmioBuildersNftManager
 }
 
 export async function initializeFixture(): Promise<RunContext> {
-	let context = new RunContext();
-	const signers: SignerWithAddress[] = await ethers.getSigners();
+	let context = new RunContext()
+	const signers: SignerWithAddress[] = await ethers.getSigners()
 	context.signers = {
 		admin: signers[0],
 		setter: signers[1],
@@ -40,13 +40,13 @@ export async function initializeFixture(): Promise<RunContext> {
 		user3: signers[4],
 		symmioFoundation: signers[4],
 		vestingPenaltyReceiver: signers[5],
-	};
+	}
 
 	context.symmioToken = await run("deploy:SymmioToken", {
 		name: "SYMMIO",
 		symbol: "SYMM",
 		admin: await context.signers.admin.getAddress(),
-	});
+	})
 
 	context.claimSymm = await run("deploy:SymmAllocationClaimer", {
 		admin: await context.signers.admin.getAddress(),
@@ -99,23 +99,30 @@ export async function initializeFixture(): Promise<RunContext> {
 	// 	launchTimeStamp: String(floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
 	// })
 
-	context.symmioBuildersNft = await run("deploy:SymmioBuildersNft", {});
+	context.symmioBuildersNft = await run("deploy:SymmioBuildersNft", {
+		admin: await context.signers.admin.getAddress(),
+	})
 
 	context.symmioBuildersNftManager = await run("deploy:SymmioBuildersNftManager", {
 		symm: await context.symmioToken.getAddress(),
 		nft: await context.symmioBuildersNft.getAddress(),
-	});
+		admin: await context.signers.admin.getAddress(),
+		minlockamount: ethers.parseEther("100").toString(),
+		cliffduration: "10",
+		vestingduration: "3600",
+		penaltyrate: ethers.parseUnits("0.2", 18).toString(),
+		penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+		grantroles: true,
+	})
 
-	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin);
+	await (await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), context.signers.admin)).wait()
 
-	await context.symmioBuildersNft.connect(context.signers.admin).grantRole(await context.symmioBuildersNft.MINTER_ROLE(), context.signers.admin);
-	await context.symmioBuildersNft.connect(context.signers.admin).grantRole(await context.symmioBuildersNft.BURNER_ROLE(), context.signers.admin);
-
-	await context.symmioBuildersNftManager.connect(context.signers.admin).grantRole(await context.symmioBuildersNftManager.MINTER_ROLE(), context.signers.admin);
-	await context.symmioBuildersNftManager.connect(context.signers.admin).grantRole(await context.symmioBuildersNftManager.SETTER_ROLE(), context.signers.admin);
-
-	await context.symmioBuildersNft.connect(context.signers.admin).grantRole(await context.symmioBuildersNft.MINTER_ROLE(), await context.symmioBuildersNftManager.getAddress());
-	await context.symmioBuildersNft.connect(context.signers.admin).grantRole(await context.symmioBuildersNft.BURNER_ROLE(), await context.symmioBuildersNftManager.getAddress());
+	await (
+		await context.symmioBuildersNft.connect(context.signers.admin).grantRole(await context.symmioBuildersNft.MINTER_ROLE(), context.signers.admin)
+	).wait()
+	await (
+		await context.symmioBuildersNft.connect(context.signers.admin).grantRole(await context.symmioBuildersNft.BURNER_ROLE(), context.signers.admin)
+	).wait()
 
 	const roles = [
 		await context.claimSymm.SETTER_ROLE(),
@@ -125,10 +132,10 @@ export async function initializeFixture(): Promise<RunContext> {
 	]
 	for (const role of roles) await context.claimSymm.grantRole(role, await context.signers.admin.getAddress())
 
-	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.claimSymm.getAddress());
-	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.signers.admin.getAddress());
+	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.claimSymm.getAddress())
+	await context.symmioToken.grantRole(await context.symmioToken.MINTER_ROLE(), await context.signers.admin.getAddress())
 	// await context.symmStaking.grantRole(await context.symmStaking.REWARD_MANAGER_ROLE(), await context.signers.admin.getAddress())
 	// await context.vesting.grantRole(await context.vesting.SETTER_ROLE(), await context.symmVestingVlanInitializer.getAddress())
 
-	return context;
+	return context
 }
