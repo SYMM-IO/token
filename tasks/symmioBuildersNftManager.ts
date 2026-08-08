@@ -1,5 +1,89 @@
 import { task } from "hardhat/config"
 import { HardhatRuntimeEnvironment } from "hardhat/types"
+import type { Signer } from "ethers"
+
+export type SymmioBuildersNftManagerDeploymentArgs = {
+	symm: string
+	nft: string
+	admin: string
+	minlockamount: string
+	cliffduration: string
+	vestingduration: string
+	penaltyrate: string
+	penaltyreceiver: string
+	grantroles?: boolean
+	proxyadminowner?: string
+}
+
+export async function deploySymmioBuildersNftManager(
+	args: SymmioBuildersNftManagerDeploymentArgs,
+	{ ethers, upgrades }: HardhatRuntimeEnvironment,
+	signer?: Signer,
+) {
+	const { symm, nft, admin, minlockamount, cliffduration, vestingduration, penaltyrate, penaltyreceiver } = args
+	const grantroles = args.grantroles ?? false
+	const addresses = { symm, nft, admin, penaltyreceiver, ...(args.proxyadminowner ? { proxyadminowner: args.proxyadminowner } : {}) }
+	for (const [label, value] of Object.entries(addresses)) {
+		if (!ethers.isAddress(value) || value === ethers.ZeroAddress) throw new Error(`Invalid ${label} address`)
+	}
+
+	const minLockAmount = BigInt(minlockamount)
+	const cliffDuration = BigInt(cliffduration)
+	const vestingDuration = BigInt(vestingduration)
+	const penaltyRate = BigInt(penaltyrate)
+	if (minLockAmount <= 0n) throw new Error("minlockamount must be greater than zero")
+	if (cliffDuration <= 0n) throw new Error("cliffduration must be greater than zero")
+	if (vestingDuration <= 0n) throw new Error("vestingduration must be greater than zero")
+	if (penaltyRate < 0n || penaltyRate > ethers.parseUnits("1", 18)) throw new Error("penaltyrate must be between 0 and 1e18")
+
+	console.log("deploy:SymmioBuildersNftManager")
+	console.table({
+		symm,
+		nft,
+		admin,
+		proxyadminowner: args.proxyadminowner ?? "signer default",
+		minLockAmount,
+		cliffDuration,
+		vestingDuration,
+		penaltyRate,
+		penaltyreceiver,
+		grantroles,
+	})
+
+	const factory = await ethers.getContractFactory("SymmioBuildersNftManager", signer)
+	const contract = await upgrades.deployProxy(
+		factory,
+		[symm, nft, admin, minLockAmount, cliffDuration, vestingDuration, penaltyRate, penaltyreceiver],
+		{ initializer: "initialize", ...(args.proxyadminowner ? { initialOwner: args.proxyadminowner } : {}) },
+	)
+	await contract.waitForDeployment()
+
+	const managerAddress = await contract.getAddress()
+	if (grantroles) {
+		const roleSigner = signer ?? (await ethers.getSigners())[0]
+		const roleSignerAddress = await roleSigner.getAddress()
+		const symmToken = await ethers.getContractAt("Symmio", symm, roleSigner)
+		const buildersNft = await ethers.getContractAt("SymmioBuildersNft", nft, roleSigner)
+		const symmAdminRole = await symmToken.DEFAULT_ADMIN_ROLE()
+		const nftAdminRole = await buildersNft.DEFAULT_ADMIN_ROLE()
+		if (!(await symmToken.hasRole(symmAdminRole, roleSignerAddress))) throw new Error("Deployer is not a SYMM admin")
+		if (!(await buildersNft.hasRole(nftAdminRole, roleSignerAddress))) throw new Error("Deployer is not an NFT admin")
+
+		await (await symmToken.grantRole(await symmToken.MINTER_ROLE(), managerAddress)).wait()
+		await (await buildersNft.grantRole(await buildersNft.MINTER_ROLE(), managerAddress)).wait()
+		await (await buildersNft.grantRole(await buildersNft.BURNER_ROLE(), managerAddress)).wait()
+		await (await buildersNft.grantRole(await buildersNft.PAUSER_ROLE(), managerAddress)).wait()
+		await (await buildersNft.grantRole(await buildersNft.UNPAUSER_ROLE(), managerAddress)).wait()
+	}
+
+	const implementationAddress = await upgrades.erc1967.getImplementationAddress(managerAddress)
+	const proxyAdminAddress = await upgrades.erc1967.getAdminAddress(managerAddress)
+	console.log(`SymmioBuildersNftManager proxy: ${managerAddress}`)
+	console.log(`SymmioBuildersNftManager implementation: ${implementationAddress}`)
+	console.log(`SymmioBuildersNftManager ProxyAdmin: ${proxyAdminAddress}`)
+	console.log(`Required roles granted: ${grantroles}`)
+	return { contract, managerAddress, implementationAddress, proxyAdminAddress }
+}
 
 task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager contract")
 	.addParam("symm", "SYMM token address")
@@ -10,54 +94,9 @@ task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager co
 	.addParam("vestingduration", "Linear vesting duration, in seconds")
 	.addParam("penaltyrate", "Early-claim penalty scaled by 1e18")
 	.addParam("penaltyreceiver", "Address receiving early-claim penalties")
+	.addOptionalParam("proxyadminowner", "Address owning the manager proxy's dedicated ProxyAdmin")
 	.addFlag("grantroles", "Grant the deployed manager its required SYMM and NFT roles from the deployer")
-	.setAction(async (args, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
-		const { symm, nft, admin, minlockamount, cliffduration, vestingduration, penaltyrate, penaltyreceiver, grantroles } = args
-		const addresses = { symm, nft, admin, penaltyreceiver }
-		for (const [label, value] of Object.entries(addresses)) {
-			if (!ethers.isAddress(value) || value === ethers.ZeroAddress) throw new Error(`Invalid ${label} address`)
-		}
-
-		const minLockAmount = BigInt(minlockamount)
-		const cliffDuration = BigInt(cliffduration)
-		const vestingDuration = BigInt(vestingduration)
-		const penaltyRate = BigInt(penaltyrate)
-		if (minLockAmount <= 0n) throw new Error("minlockamount must be greater than zero")
-		if (cliffDuration <= 0n) throw new Error("cliffduration must be greater than zero")
-		if (vestingDuration <= 0n) throw new Error("vestingduration must be greater than zero")
-		if (penaltyRate < 0n || penaltyRate > ethers.parseUnits("1", 18)) throw new Error("penaltyrate must be between 0 and 1e18")
-
-		console.log("deploy:SymmioBuildersNftManager")
-		console.table({ symm, nft, admin, minLockAmount, cliffDuration, vestingDuration, penaltyRate, penaltyreceiver, grantroles })
-
-		const factory = await ethers.getContractFactory("SymmioBuildersNftManager")
-		const contract = await upgrades.deployProxy(
-			factory,
-			[symm, nft, admin, minLockAmount, cliffDuration, vestingDuration, penaltyRate, penaltyreceiver],
-			{ initializer: "initialize" },
-		)
-		await contract.waitForDeployment()
-
-		const managerAddress = await contract.getAddress()
-		if (grantroles) {
-			const [deployer] = await ethers.getSigners()
-			const symmToken = await ethers.getContractAt("Symmio", symm)
-			const buildersNft = await ethers.getContractAt("SymmioBuildersNft", nft)
-			const symmAdminRole = await symmToken.DEFAULT_ADMIN_ROLE()
-			const nftAdminRole = await buildersNft.DEFAULT_ADMIN_ROLE()
-			if (!(await symmToken.hasRole(symmAdminRole, deployer.address))) throw new Error("Deployer is not a SYMM admin")
-			if (!(await buildersNft.hasRole(nftAdminRole, deployer.address))) throw new Error("Deployer is not an NFT admin")
-
-			await (await symmToken.grantRole(await symmToken.MINTER_ROLE(), managerAddress)).wait()
-			await (await buildersNft.grantRole(await buildersNft.MINTER_ROLE(), managerAddress)).wait()
-			await (await buildersNft.grantRole(await buildersNft.BURNER_ROLE(), managerAddress)).wait()
-			await (await buildersNft.grantRole(await buildersNft.PAUSER_ROLE(), managerAddress)).wait()
-			await (await buildersNft.grantRole(await buildersNft.UNPAUSER_ROLE(), managerAddress)).wait()
-		}
-
-		const implementationAddress = await upgrades.erc1967.getImplementationAddress(managerAddress)
-		console.log(`SymmioBuildersNftManager proxy: ${managerAddress}`)
-		console.log(`SymmioBuildersNftManager implementation: ${implementationAddress}`)
-		console.log(`Required roles granted: ${grantroles}`)
-		return contract
+	.setAction(async (args, hre: HardhatRuntimeEnvironment) => {
+		const result = await deploySymmioBuildersNftManager(args as SymmioBuildersNftManagerDeploymentArgs, hre)
+		return result.contract
 	})
