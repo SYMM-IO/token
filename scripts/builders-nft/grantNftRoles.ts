@@ -1,18 +1,20 @@
 import { Contract, getAddress } from "ethers"
 import hre from "hardhat"
 
-import { loadRolloutConfig } from "./lib/config"
-import { executionEnabled, prepareRolloutContext } from "./lib/execution"
-import { loadRoleTransactions } from "./lib/roleTransactions"
-import { resolveConfiguredSigner } from "./lib/signer"
-import { saveRolloutState } from "./lib/state"
+import { loadRolloutConfig } from "./lib/config.js"
+import { executionEnabled, prepareRolloutContext } from "./lib/execution.js"
+import { loadRoleTransactions } from "./lib/roleTransactions.js"
+import { resolveConfiguredSigner } from "./lib/signer.js"
+import { saveRolloutState } from "./lib/state.js"
 
 const accessControlAbi = ["function grantRole(bytes32 role,address account)", "function hasRole(bytes32 role,address account) view returns (bool)"]
 
 async function main() {
+	const { ethers } = await hre.network.create()
+	const provider = ethers.provider
 	const loaded = loadRolloutConfig()
 	const { config } = loaded
-	const state = await prepareRolloutContext(hre.ethers.provider, loaded)
+	const state = await prepareRolloutContext(provider, loaded)
 	const execute = executionEnabled(config.network.chainId)
 	const plan = loadRoleTransactions(loaded.roleTransactionsFile)
 	if (plan.chainId !== config.network.chainId || plan.networkName !== config.network.name) throw new Error("Role plan network does not match config")
@@ -28,7 +30,7 @@ async function main() {
 	const signer = await resolveConfiguredSigner({
 		role: "nftProxyAdminOwner",
 		config: config.signers.nftProxyAdminOwner,
-		provider: hre.ethers.provider,
+		provider,
 		state,
 		stateFile: loaded.stateFile,
 	})

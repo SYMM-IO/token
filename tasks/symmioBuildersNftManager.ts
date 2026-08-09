@@ -1,6 +1,7 @@
-import { task } from "hardhat/config"
-import { HardhatRuntimeEnvironment } from "hardhat/types"
+import type { HardhatEthers } from "@nomicfoundation/hardhat-ethers/types"
+import { upgrades, type HardhatUpgrades } from "@openzeppelin/hardhat-upgrades"
 import type { Signer } from "ethers"
+import type { HardhatRuntimeEnvironment } from "hardhat/types/hre"
 
 export type SymmioBuildersNftManagerDeploymentArgs = {
 	symm: string
@@ -17,7 +18,8 @@ export type SymmioBuildersNftManagerDeploymentArgs = {
 
 export async function deploySymmioBuildersNftManager(
 	args: SymmioBuildersNftManagerDeploymentArgs,
-	{ ethers, upgrades }: HardhatRuntimeEnvironment,
+	ethers: HardhatEthers,
+	upgradesApi: HardhatUpgrades,
 	signer?: Signer,
 ) {
 	const { symm, nft, admin, minlockamount, cliffduration, vestingduration, penaltyrate, penaltyreceiver } = args
@@ -51,7 +53,7 @@ export async function deploySymmioBuildersNftManager(
 	})
 
 	const factory = await ethers.getContractFactory("SymmioBuildersNftManager", signer)
-	const contract = await upgrades.deployProxy(
+	const contract = await upgradesApi.deployProxy(
 		factory,
 		[symm, nft, admin, minLockAmount, cliffDuration, vestingDuration, penaltyRate, penaltyreceiver],
 		{ initializer: "initialize", ...(args.proxyadminowner ? { initialOwner: args.proxyadminowner } : {}) },
@@ -76,8 +78,8 @@ export async function deploySymmioBuildersNftManager(
 		await (await buildersNft.grantRole(await buildersNft.UNPAUSER_ROLE(), managerAddress)).wait()
 	}
 
-	const implementationAddress = await upgrades.erc1967.getImplementationAddress(managerAddress)
-	const proxyAdminAddress = await upgrades.erc1967.getAdminAddress(managerAddress)
+	const implementationAddress = await upgradesApi.erc1967.getImplementationAddress(managerAddress)
+	const proxyAdminAddress = await upgradesApi.erc1967.getAdminAddress(managerAddress)
 	console.log(`SymmioBuildersNftManager proxy: ${managerAddress}`)
 	console.log(`SymmioBuildersNftManager implementation: ${implementationAddress}`)
 	console.log(`SymmioBuildersNftManager ProxyAdmin: ${proxyAdminAddress}`)
@@ -85,18 +87,12 @@ export async function deploySymmioBuildersNftManager(
 	return { contract, managerAddress, implementationAddress, proxyAdminAddress }
 }
 
-task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager contract")
-	.addParam("symm", "SYMM token address")
-	.addParam("nft", "SymmioBuildersNft proxy address")
-	.addParam("admin", "Address receiving all manager administration roles")
-	.addParam("minlockamount", "Minimum SYMM amount required to mint an NFT, in wei")
-	.addParam("cliffduration", "Unlock cliff duration, in seconds")
-	.addParam("vestingduration", "Linear vesting duration, in seconds")
-	.addParam("penaltyrate", "Early-claim penalty scaled by 1e18")
-	.addParam("penaltyreceiver", "Address receiving early-claim penalties")
-	.addOptionalParam("proxyadminowner", "Address owning the manager proxy's dedicated ProxyAdmin")
-	.addFlag("grantroles", "Grant the deployed manager its required SYMM and NFT roles from the deployer")
-	.setAction(async (args, hre: HardhatRuntimeEnvironment) => {
-		const result = await deploySymmioBuildersNftManager(args as SymmioBuildersNftManagerDeploymentArgs, hre)
-		return result.contract
-	})
+export default async function deploySymmioBuildersNftManagerTask(
+	args: SymmioBuildersNftManagerDeploymentArgs,
+	hre: HardhatRuntimeEnvironment,
+) {
+	const connection = await hre.network.create()
+	const upgradesApi = await upgrades(hre, connection)
+	const result = await deploySymmioBuildersNftManager(args, connection.ethers, upgradesApi)
+	return result.contract
+}

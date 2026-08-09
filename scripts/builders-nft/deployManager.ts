@@ -1,14 +1,15 @@
 import { Contract, ZeroHash, getAddress, keccak256 } from "ethers"
 import hre from "hardhat"
+import { upgrades } from "@openzeppelin/hardhat-upgrades"
 
-import { deploySymmioBuildersNftManager } from "../../tasks/symmioBuildersNftManager"
-import { loadRolloutConfig, requireManagerDeploymentConfig } from "./lib/config"
-import { executionEnabled, prepareRolloutContext } from "./lib/execution"
-import { readOwnableOwner, readProxyAdmin, readProxyImplementation, requireCode, runtimeCodeHash } from "./lib/onchain"
-import { resolveConfiguredSigner } from "./lib/signer"
-import { saveRolloutState } from "./lib/state"
+import { deploySymmioBuildersNftManager } from "../../tasks/symmioBuildersNftManager.js"
+import { loadRolloutConfig, requireManagerDeploymentConfig } from "./lib/config.js"
+import { executionEnabled, prepareRolloutContext } from "./lib/execution.js"
+import { readOwnableOwner, readProxyAdmin, readProxyImplementation, requireCode, runtimeCodeHash } from "./lib/onchain.js"
+import { resolveConfiguredSigner } from "./lib/signer.js"
+import { saveRolloutState } from "./lib/state.js"
 
-async function verifyManager(proxy: string, loaded: ReturnType<typeof loadRolloutConfig>) {
+async function verifyManager(proxy: string, loaded: ReturnType<typeof loadRolloutConfig>, provider: import("ethers").Provider) {
 	const { config } = loaded
 	const expected = requireManagerDeploymentConfig(config)
 	const manager = new Contract(
@@ -28,7 +29,7 @@ async function verifyManager(proxy: string, loaded: ReturnType<typeof loadRollou
 			"function OPERATOR_ROLE() view returns (bytes32)",
 			"function MINTER_ROLE() view returns (bytes32)",
 		],
-		hre.ethers.provider,
+		provider,
 	)
 	const checks: Array<[string, string, string]> = [
 		["SYMM", getAddress(await manager.SYMM()), config.contracts.symm],
@@ -50,17 +51,20 @@ async function verifyManager(proxy: string, loaded: ReturnType<typeof loadRollou
 }
 
 async function main() {
+	const connection = await hre.network.create()
+	const { ethers } = connection
+	const upgradesApi = await upgrades(hre, connection)
 	const loaded = loadRolloutConfig()
 	const { config } = loaded
 	const managerConfig = requireManagerDeploymentConfig(config)
-	const provider = hre.ethers.provider
+	const provider = ethers.provider
 	const state = await prepareRolloutContext(provider, loaded)
 	const execute = executionEnabled(config.network.chainId)
 	await requireCode(provider, "SYMM", config.contracts.symm)
 	await requireCode(provider, "Builders NFT proxy", config.contracts.buildersNftProxy)
 
-	const factory = await hre.ethers.getContractFactory("SymmioBuildersNftManager")
-	await hre.upgrades.validateImplementation(factory, { kind: "transparent" })
+	const factory = await ethers.getContractFactory("SymmioBuildersNftManager")
+	await upgradesApi.validateImplementation(factory, { kind: "transparent" })
 	const artifact = await hre.artifacts.readArtifact("SymmioBuildersNftManager")
 	const implementationRuntimeCodeHash = keccak256(artifact.deployedBytecode)
 	console.log(
@@ -89,7 +93,7 @@ async function main() {
 
 	if (state.manager?.proxy) {
 		await requireCode(provider, "Saved manager proxy", state.manager.proxy)
-		await verifyManager(state.manager.proxy, loaded)
+		await verifyManager(state.manager.proxy, loaded, provider)
 		const implementation = await readProxyImplementation(provider, state.manager.proxy)
 		const proxyAdmin = await readProxyAdmin(provider, state.manager.proxy)
 		const owner = await readOwnableOwner(provider, proxyAdmin)
@@ -130,7 +134,8 @@ async function main() {
 			proxyadminowner: managerConfig.proxyAdminOwner,
 			grantroles: false,
 		},
-		hre,
+		ethers,
+		upgradesApi,
 		deployer,
 	)
 	const proxyAdminOwner = await readOwnableOwner(provider, deployment.proxyAdminAddress)
@@ -141,7 +146,7 @@ async function main() {
 	if (deployedRuntimeHash !== implementationRuntimeCodeHash) {
 		throw new Error(`Deployed manager runtime hash is ${deployedRuntimeHash}, expected ${implementationRuntimeCodeHash}`)
 	}
-	await verifyManager(deployment.managerAddress, loaded)
+	await verifyManager(deployment.managerAddress, loaded, provider)
 	state.manager = {
 		proxy: deployment.managerAddress,
 		implementation: deployment.implementationAddress,

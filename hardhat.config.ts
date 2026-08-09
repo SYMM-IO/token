@@ -3,10 +3,13 @@ import hardhatUpgrades from "@openzeppelin/hardhat-upgrades"
 import { config as loadEnv } from "dotenv"
 import { configVariable, defineConfig } from "hardhat/config"
 
+import { tasks } from "./tasks/index.js"
+
 loadEnv()
 
 export default defineConfig({
 	plugins: [hardhatToolboxMochaEthers, hardhatUpgrades],
+	tasks,
 	solidity: {
 		version: "0.8.27",
 		settings: {

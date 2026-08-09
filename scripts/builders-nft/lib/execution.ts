@@ -1,7 +1,7 @@
 import type { Provider } from "ethers"
 
-import type { LoadedRolloutConfig } from "./config"
-import { bindRolloutState, loadRolloutState, saveRolloutState } from "./state"
+import type { LoadedRolloutConfig } from "./config.js"
+import { bindRolloutState, loadRolloutState, saveRolloutState } from "./state.js"
 
 export async function prepareRolloutContext(provider: Provider, loaded: LoadedRolloutConfig) {
 	const network = await provider.getNetwork()

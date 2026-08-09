@@ -1,23 +1,27 @@
-import { task } from "hardhat/config";
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { ethers } from "hardhat";
 import * as fs from "fs";
+import type { HardhatRuntimeEnvironment } from "hardhat/types/hre";
+import type { SymmVestingPlanInitializer__factory } from "../typechain-types/index.js";
 
-task("deploy:SymmVestingPlanInitializer", "Deploys the SymmVestingPlanInitializer contract")
-	.addParam("symmTokenAddress", "Address of the symm token")
-	.addParam("symmVestingAddress", "Address of the symmVestingContract")
-	.addParam("totalInitiatableSYMM", "Total initiatable symm")
-	.addParam("launchTimeStamp", "The of the launch in seconds")
-	.setAction(async ({ symmTokenAddress, symmVestingAddress, totalInitiatableSYMM, launchTimeStamp }, {
-			ethers,
-			upgrades,
-		}: HardhatRuntimeEnvironment) => {
+type DeploySymmVestingPlanInitializerArguments = {
+	symmTokenAddress: string;
+	symmVestingAddress: string;
+	totalInitiatableSYMM: string;
+	launchTimeStamp: string;
+};
+
+export default async function deploySymmVestingPlanInitializer(
+	{ symmTokenAddress, symmVestingAddress, totalInitiatableSYMM, launchTimeStamp }: DeploySymmVestingPlanInitializerArguments,
+	hre: HardhatRuntimeEnvironment,
+) {
+			const { ethers } = await hre.network.create();
 			console.log("deploy:SymmVestingPlanInitializer");
 
 			const signers = await ethers.getSigners();
 			const admin = signers[0];
 
-			const SymmVestingPlanInitializer = await ethers.getContractFactory("SymmVestingPlanInitializer");
+			const SymmVestingPlanInitializer = await ethers.getContractFactory(
+				"SymmVestingPlanInitializer",
+			) as unknown as SymmVestingPlanInitializer__factory;
 			const symmVestingPlanInitializer = await SymmVestingPlanInitializer.deploy(admin, symmTokenAddress, symmVestingAddress, totalInitiatableSYMM, launchTimeStamp);
 			await symmVestingPlanInitializer.waitForDeployment();
 
@@ -48,5 +52,4 @@ task("deploy:SymmVestingPlanInitializer", "Deploys the SymmVestingPlanInitialize
 
 			console.log(`symmVestingPlanInitializer Contract deployed at: ${await symmVestingPlanInitializer.getAddress()}`);
 			return symmVestingPlanInitializer;
-		},
-	);
+		}

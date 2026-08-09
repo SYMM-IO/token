@@ -1,16 +1,12 @@
-import { ethers } from "hardhat"
+import { Interface } from "ethers"
 
-const abi = []
-
-// Create an Interface instance using the ABI
-const iface = new ethers.Interface(abi)
-
-// Your error data (for instance, from a reverted transaction)
+const abi: string[] = []
+const iface = new Interface(abi)
 const errorData = ""
 
 try {
-	// Attempt to parse the error data using the ABI
-	const parsedError = iface.parseError(errorData)!
+	const parsedError = iface.parseError(errorData)
+	if (parsedError === null) throw new Error("Error data did not match the configured ABI")
 	console.log("Error Name:", parsedError.name)
 	console.log("Error Arguments:", parsedError.args)
 } catch (error) {

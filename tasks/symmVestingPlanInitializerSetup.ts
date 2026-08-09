@@ -1,20 +1,25 @@
-import { task } from "hardhat/config";
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { ethers } from "hardhat";
 import * as fs from "fs";
+import type { HardhatRuntimeEnvironment } from "hardhat/types/hre";
+import type { SymmVestingPlanInitializer } from "../typechain-types/index.js";
 
-task("SymmVestingPlanInitializerSetup", "Setup the SymmVestingPlanInitializer contract")
-	.addParam("deployedAddress", "Address initializer")
-	.setAction(async ({ deployedAddress }, {
-			ethers,
-			upgrades,
-		}: HardhatRuntimeEnvironment) => {
+type SetupSymmVestingPlanInitializerArguments = {
+	deployedAddress: string;
+};
+
+export default async function setupSymmVestingPlanInitializer(
+	{ deployedAddress }: SetupSymmVestingPlanInitializerArguments,
+	hre: HardhatRuntimeEnvironment,
+) {
+			const { ethers } = await hre.network.create();
 			console.log("Setup SymmVestingPlanInitializer");
 
 			const signers = await ethers.getSigners();
 			const admin = signers[0];
 
-			const symmVestingPlanInitializer = await ethers.getContractAt("SymmVestingPlanInitializer", deployedAddress)
+			const symmVestingPlanInitializer = await ethers.getContractAt(
+				"SymmVestingPlanInitializer",
+				deployedAddress,
+			) as unknown as SymmVestingPlanInitializer;
 
 			const data = fs.readFileSync("user_available_symm.json", "utf8");
 			const user_available: {
@@ -31,7 +36,7 @@ task("SymmVestingPlanInitializerSetup", "Setup the SymmVestingPlanInitializer co
 				const usersChunk = users.slice(i, i + chunkSize);
 				const amountsChunk = amounts.slice(i, i + chunkSize);
 				try {
-					await symmVestingPlanInitializer.connect(admin).setInitiatableVestingAmount(usersChunk, amountsChunk);
+					await symmVestingPlanInitializer.connect(admin).setPendingAmounts(usersChunk, amountsChunk);
 					console.log(`${i}..${i + chunkSize}: OK`);
 				} catch (error) {
 					console.error(`Error in users=${usersChunk}, amounts=${amountsChunk}`, error);
@@ -43,5 +48,4 @@ task("SymmVestingPlanInitializerSetup", "Setup the SymmVestingPlanInitializer co
 
 			console.log(`Set successfully!`);
 			return symmVestingPlanInitializer;
-		},
-	);
+		}

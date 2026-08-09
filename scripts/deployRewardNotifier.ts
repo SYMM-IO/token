@@ -1,6 +1,7 @@
-import { ethers, run } from "hardhat"
+import hre from "hardhat"
 
 async function main() {
+	const { ethers } = await hre.network.create()
 	const symmAddress = "0x800822d361335b4d5F352Dac293cA4128b5B605f"
 	const admin = "0x5146C35725d9b8F11A84ebD4a3abe9845698Ada9"
 	const stakingAddress = "0x573310A15f3dc4828994819bc67AB6B1596AC90c"
@@ -21,9 +22,9 @@ async function main() {
 
 	try {
 		console.log(`Verifying ${deployedAddress}`)
-		await run("verify:verify", {
+		await hre.tasks.getTask("verify").run({
 			address: deployedAddress,
-			constructorArguments: [admin, symmAddress, stakingAddress],
+			constructorArgs: [admin, symmAddress, stakingAddress],
 		})
 	} catch (err) {
 		console.error(err)

@@ -1,10 +1,10 @@
 import { Contract, Interface, ZeroAddress, ZeroHash, getAddress, id } from "ethers"
 import hre from "hardhat"
 
-import { loadRolloutConfig } from "./lib/config"
-import { prepareRolloutContext } from "./lib/execution"
-import { readAccessControlMembers, requireCode, scanAccessControlMembers } from "./lib/onchain"
-import { saveRoleTransactions, type PreparedTransaction, type RoleTransactionsFile } from "./lib/roleTransactions"
+import { loadRolloutConfig } from "./lib/config.js"
+import { prepareRolloutContext } from "./lib/execution.js"
+import { readAccessControlMembers, requireCode, scanAccessControlMembers } from "./lib/onchain.js"
+import { saveRoleTransactions, type PreparedTransaction, type RoleTransactionsFile } from "./lib/roleTransactions.js"
 
 const accessControlInterface = new Interface([
 	"function grantRole(bytes32 role,address account)",
@@ -20,26 +20,28 @@ const timelockInterface = new Interface([
 ])
 
 async function main() {
+	const { ethers } = await hre.network.create()
+	const provider = ethers.provider
 	const loaded = loadRolloutConfig()
 	const { config } = loaded
-	const state = await prepareRolloutContext(hre.ethers.provider, loaded)
+	const state = await prepareRolloutContext(provider, loaded)
 	if (!state.manager?.proxy) throw new Error(`Manager deployment is missing from ${loaded.stateFile}`)
 	const manager = getAddress(state.manager.proxy)
-	await requireCode(hre.ethers.provider, "Manager proxy", manager)
+	await requireCode(provider, "Manager proxy", manager)
 	const managerContract = new Contract(
 		manager,
 		["function SYMM() view returns (address)", "function nftContract() view returns (address)"],
-		hre.ethers.provider,
+		provider,
 	)
 	if (getAddress(await managerContract.SYMM()) !== config.contracts.symm) throw new Error("Manager SYMM getter does not match config")
 	if (getAddress(await managerContract.nftContract()) !== config.contracts.buildersNftProxy) {
 		throw new Error("Manager nftContract getter does not match config")
 	}
 
-	const nft = new Contract(config.contracts.buildersNftProxy, accessControlInterface, hre.ethers.provider)
-	const symm = new Contract(config.contracts.symm, accessControlInterface, hre.ethers.provider)
-	const nftAdminMembers = await readAccessControlMembers(hre.ethers.provider, config.contracts.buildersNftProxy, ZeroHash)
-	const symmAdminMembers = await readAccessControlMembers(hre.ethers.provider, config.contracts.symm, ZeroHash)
+	const nft = new Contract(config.contracts.buildersNftProxy, accessControlInterface, provider)
+	const symm = new Contract(config.contracts.symm, accessControlInterface, provider)
+	const nftAdminMembers = await readAccessControlMembers(provider, config.contracts.buildersNftProxy, ZeroHash)
+	const symmAdminMembers = await readAccessControlMembers(provider, config.contracts.symm, ZeroHash)
 	if (!nftAdminMembers.includes(config.contracts.expectedBuildersNftProxyAdminOwner)) {
 		throw new Error(`Expected NFT admin ${config.contracts.expectedBuildersNftProxyAdminOwner} is not a DEFAULT_ADMIN_ROLE member`)
 	}
@@ -71,7 +73,7 @@ async function main() {
 			"function PROPOSER_ROLE() view returns (bytes32)",
 			"function EXECUTOR_ROLE() view returns (bytes32)",
 		],
-		hre.ethers.provider,
+		provider,
 	)
 	const minimumDelay = (await timelock.getMinDelay()) as bigint
 	const predecessor = config.roles.timelockPredecessor
@@ -80,13 +82,13 @@ async function main() {
 	const proposerRole = (await timelock.PROPOSER_ROLE()) as string
 	const executorRole = (await timelock.EXECUTOR_ROLE()) as string
 	const proposerScan = await scanAccessControlMembers(
-		hre.ethers.provider,
+		provider,
 		config.contracts.expectedSymmAdmin,
 		proposerRole,
 		config.roles.logScanChunkSize,
 	)
 	const executorScan = await scanAccessControlMembers(
-		hre.ethers.provider,
+		provider,
 		config.contracts.expectedSymmAdmin,
 		executorRole,
 		config.roles.logScanChunkSize,

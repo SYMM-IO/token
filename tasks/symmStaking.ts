@@ -1,12 +1,21 @@
-import { task, types } from "hardhat/config"
+import type { HardhatRuntimeEnvironment } from "hardhat/types/hre"
 
-task("deploy:SymmStaking", "Deploys the SymmStaking logic and proxy using CREATE2")
-	.addParam("admin", "The admin of the SymmStaking contract")
-	.addParam("token", "The address of the staking token")
-	.addParam("factory", "The deployed Create2Factory contract address")
-	.addParam("implsalt", "Salt for deploying the implementation contract", undefined, types.string, true)
-	.addParam("proxysalt", "Salt for deploying the proxy contract", undefined, types.string, true)
-	.setAction(async ({ admin, token, factory, implsalt, proxysalt }, { ethers }) => {
+type DeploySymmStakingArguments = {
+	admin: string
+	token: string
+	factory: string
+	implsalt: string
+	proxysalt: string
+}
+
+export default async function deploySymmStaking(
+	{ admin, token, factory, implsalt, proxysalt }: DeploySymmStakingArguments,
+	hre: HardhatRuntimeEnvironment,
+) {
+		const { ethers } = await hre.network.create()
+		for (const [name, address] of Object.entries({ admin, token, factory })) {
+			if (!ethers.isAddress(address) || address === ethers.ZeroAddress) throw new Error(`Invalid required --${name} address`)
+		}
 		console.log("Deploying deterministic contracts for SymmStaking...")
 		const dryRun = false
 
@@ -84,4 +93,4 @@ task("deploy:SymmStaking", "Deploys the SymmStaking logic and proxy using CREATE
 		// 	proxy: predictedProxyAddress,
 		// }
 		return await ethers.getContractAt("SymmStaking", predictedProxyAddress)
-	})
+	}

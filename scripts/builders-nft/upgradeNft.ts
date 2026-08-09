@@ -1,12 +1,13 @@
 import { Contract, Interface, getAddress, keccak256 } from "ethers"
 import hre from "hardhat"
+import { upgrades } from "@openzeppelin/hardhat-upgrades"
 
-import { loadRolloutConfig } from "./lib/config"
-import { executionEnabled, prepareRolloutContext } from "./lib/execution"
-import { readOwnableOwner, readProxyAdmin, readProxyImplementation, requireCode, runtimeCodeHash, snapshotNft } from "./lib/onchain"
-import { resolveConfiguredSigner } from "./lib/signer"
-import { saveRolloutState } from "./lib/state"
-import { findCompiledStorageLayout, loadStorageBaseline, validateNftUpgrade } from "./lib/upgradeValidation"
+import { loadRolloutConfig } from "./lib/config.js"
+import { executionEnabled, prepareRolloutContext } from "./lib/execution.js"
+import { readOwnableOwner, readProxyAdmin, readProxyImplementation, requireCode, runtimeCodeHash, snapshotNft } from "./lib/onchain.js"
+import { resolveConfiguredSigner } from "./lib/signer.js"
+import { saveRolloutState } from "./lib/state.js"
+import { findCompiledStorageLayout, loadStorageBaseline, validateNftUpgrade } from "./lib/upgradeValidation.js"
 
 const NFT_CONTRACT = "SymmioBuildersNft"
 
@@ -15,9 +16,12 @@ function sameSnapshot(left: unknown, right: unknown): boolean {
 }
 
 async function main() {
+	const connection = await hre.network.create()
+	const { ethers } = connection
+	const upgradesApi = await upgrades(hre, connection)
 	const loaded = loadRolloutConfig()
 	const { config } = loaded
-	const provider = hre.ethers.provider
+	const provider = ethers.provider
 	const state = await prepareRolloutContext(provider, loaded)
 	const execute = executionEnabled(config.network.chainId)
 
@@ -114,8 +118,8 @@ async function main() {
 			state,
 			stateFile: loaded.stateFile,
 		})
-		const factory = await hre.ethers.getContractFactory(NFT_CONTRACT, deployer)
-		await hre.upgrades.validateImplementation(factory, { kind: "transparent" })
+		const factory = await ethers.getContractFactory(NFT_CONTRACT, deployer)
+		await upgradesApi.validateImplementation(factory, { kind: "transparent" })
 		const implementation = await factory.deploy()
 		const deployment = implementation.deploymentTransaction()
 		await implementation.waitForDeployment()

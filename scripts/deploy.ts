@@ -1,6 +1,7 @@
-import { ethers, run } from "hardhat"
+import hre from "hardhat"
 
 async function main() {
+	const { ethers } = await hre.network.create()
 	const contractName = ""
 	const factory = await ethers.getContractFactory(contractName)
 	const contract = await factory.deploy()
@@ -9,9 +10,9 @@ async function main() {
 
 	console.log(`${contractName} deployed: ${await contract.getAddress()}`)
 
-	await run("verify:verify", {
+	await hre.tasks.getTask("verify").run({
 		address: await contract.getAddress(),
-		constructorArguments: [],
+		constructorArgs: [],
 	})
 }
 

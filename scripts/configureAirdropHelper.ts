@@ -1,8 +1,9 @@
-import { ethers } from "hardhat"
 import fs from "fs"
 import { parse } from "csv-parse/sync"
+import hre from "hardhat"
 
 async function main() {
+	const { ethers } = await hre.network.create()
 	// Read and parse the CSV file
 	const fileContent = fs.readFileSync("airdrop_checked_merged.csv", "utf-8")
 	const records = parse(fileContent, {

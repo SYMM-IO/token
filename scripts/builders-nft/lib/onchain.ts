@@ -1,6 +1,6 @@
 import { Contract, Interface, ZeroHash, getAddress, id, keccak256, toBeHex, toUtf8Bytes, type Provider } from "ethers"
 
-import type { NftSnapshot } from "./state"
+import type { NftSnapshot } from "./state.js"
 
 function eip1967Slot(label: string): string {
 	return toBeHex(BigInt(keccak256(toUtf8Bytes(label))) - 1n, 32)

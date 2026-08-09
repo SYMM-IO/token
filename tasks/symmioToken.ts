@@ -1,22 +1,26 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
-import { task } from "hardhat/config"
-import { HardhatRuntimeEnvironment } from "hardhat/types"
+import type { HardhatRuntimeEnvironment } from "hardhat/types/hre"
 
-task("deploy:SymmioToken", "Deploys the Symmio token")
-	.addParam("name", "The name of the Symmio token contract")
-	.addParam("symbol", "The symbol of the Symmio token contract")
-	.addParam("admin", "The admin address of the Symmio token contract")
-	.setAction(async ({ name, symbol, admin }, { ethers }: HardhatRuntimeEnvironment) => {
-		console.log("deploy:SymmioToken")
+type DeploySymmioTokenArguments = {
+	name: string
+	symbol: string
+	admin: string
+}
 
-		const signers: SignerWithAddress[] = await ethers.getSigners()
-		const owner: SignerWithAddress = signers[0]
+export default async function deploySymmioToken(
+	{ name, symbol, admin }: DeploySymmioTokenArguments,
+	hre: HardhatRuntimeEnvironment,
+) {
+	const { ethers } = await hre.network.create()
+	if (name.length === 0) throw new Error("Missing required --name option")
+	if (symbol.length === 0) throw new Error("Missing required --symbol option")
+	if (!ethers.isAddress(admin) || admin === ethers.ZeroAddress) throw new Error("Invalid required --admin address")
 
-		const SymmioTokenFactory = await ethers.getContractFactory("Symmio")
-		const symmioToken = await SymmioTokenFactory.connect(owner).deploy(name, symbol, admin)
-		await symmioToken.waitForDeployment()
+	console.log("deploy:SymmioToken")
+	const [owner] = await ethers.getSigners()
+	const factory = await ethers.getContractFactory("Symmio")
+	const token = await factory.connect(owner).deploy(name, symbol, admin)
+	await token.waitForDeployment()
 
-		console.log(`Symmio Token deployed: ${await symmioToken.getAddress()}`)
-
-		return symmioToken
-	})
+	console.log(`Symmio Token deployed: ${await token.getAddress()}`)
+	return token
+}

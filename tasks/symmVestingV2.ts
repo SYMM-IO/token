@@ -1,19 +1,21 @@
-import { task, types } from "hardhat/config";
+import type { HardhatRuntimeEnvironment } from "hardhat/types/hre";
 
-task("deploy:vestingV2", "Deploys the SymmVestingV2 logic and proxy using CREATE2")
-	.addParam("admin", "The admin of the SymmVestingV2 contract")
-	.addParam("penaltyreceiver", "Address that receives the penalty")
-	.addParam("pool", "Address of the pool")
-	.addParam("router", "Address of the router")
-	.addParam("permit2", "Address of the permit2")
-	.addParam("vault", "Address of the vault")
-	.addParam("symm", "Address of symm token")
-	.addParam("usdc", "Address of usdc token")
-	.addParam("lp", "Address of lp token")
-	.addParam("factory", "The deployed Create2Factory contract address")
-	.addParam("implsalt", "Salt for deploying the implementation contract", undefined, types.string, true)
-	.addParam("proxysalt", "Salt for deploying the proxy contract", undefined, types.string, true)
-	.setAction(async ({
+type DeploySymmVestingV2Arguments = {
+	admin: string;
+	penaltyreceiver: string;
+	pool: string;
+	router: string;
+	permit2: string;
+	vault: string;
+	symm: string;
+	usdc: string;
+	lp: string;
+	factory: string;
+	implsalt: string;
+	proxysalt: string;
+};
+
+export default async function deploySymmVestingV2({
 						  admin,
 						  penaltyreceiver,
 						  pool,
@@ -26,7 +28,11 @@ task("deploy:vestingV2", "Deploys the SymmVestingV2 logic and proxy using CREATE
 						  factory,
 						  implsalt,
 						  proxysalt,
-					  }, { ethers }) => {
+					  }: DeploySymmVestingV2Arguments, hre: HardhatRuntimeEnvironment) {
+		const { ethers } = await hre.network.create();
+		for (const [name, address] of Object.entries({ admin, penaltyreceiver, pool, router, permit2, vault, symm, usdc, lp, factory })) {
+			if (!ethers.isAddress(address) || address === ethers.ZeroAddress) throw new Error(`Invalid required --${name} address`);
+		}
 		console.log("Deploying deterministic contracts for SymmVestingV2...");
 		const dryRun = false;
 
@@ -106,4 +112,4 @@ task("deploy:vestingV2", "Deploys the SymmVestingV2 logic and proxy using CREATE
 		}
 
 		return await ethers.getContractAt("SymmVestingV2", predictedProxyAddress);
-	});
+	}

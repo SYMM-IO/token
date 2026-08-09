@@ -1,7 +1,7 @@
 import { Wallet, getAddress, isHexString, type Provider, type Signer } from "ethers"
 
-import type { PrivateKeyEnvSignerConfig } from "./config"
-import { saveRolloutState, type RolloutState } from "./state"
+import type { PrivateKeyEnvSignerConfig } from "./config.js"
+import { saveRolloutState, type RolloutState } from "./state.js"
 
 function normalizePrivateKey(raw: string): string {
 	const trimmed = raw.trim()
