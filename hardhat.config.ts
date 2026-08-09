@@ -1,35 +1,19 @@
-import "@nomicfoundation/hardhat-toolbox"
-import "@nomicfoundation/hardhat-verify"
-import "@openzeppelin/hardhat-upgrades"
-import "@typechain/hardhat"
-import * as dotenv from "dotenv"
-import "hardhat-gas-reporter"
-import { HardhatUserConfig } from "hardhat/config"
-import "solidity-coverage"
+import hardhatToolboxMochaEthers from "@nomicfoundation/hardhat-toolbox-mocha-ethers"
+import hardhatUpgrades from "@openzeppelin/hardhat-upgrades"
+import { config as loadEnv } from "dotenv"
+import { configVariable, defineConfig } from "hardhat/config"
 
-import "./tasks"
-dotenv.config()
+loadEnv()
 
-const accounts_list: any = [process.env.ACCOUNT || "0xec81e00837948239d5927bcb2b785675552bc92f1d2607ee91c540ddb56d6796"] // Dummy private key
-
-export const config: HardhatUserConfig = {
-	defaultNetwork: "hardhat",
-	gasReporter: {
-		currency: "USD",
-		enabled: true,
-		excludeContracts: [],
-		src: "./contracts",
-	},
+export default defineConfig({
+	plugins: [hardhatToolboxMochaEthers, hardhatUpgrades],
 	solidity: {
 		version: "0.8.27",
 		settings: {
+			evmVersion: "paris",
 			metadata: {
-				// Not including the metadata hash
-				// https://github.com/paulrberg/hardhat-template/issues/31
 				bytecodeHash: "none",
 			},
-			// Disable the optimizer when debugging
-			// https://hardhat.org/hardhat-network/#solidity-optimizer-support
 			optimizer: {
 				enabled: true,
 				runs: 200,
@@ -40,40 +24,46 @@ export const config: HardhatUserConfig = {
 			},
 		},
 	},
-
 	networks: {
 		hardhat: {
-			// forking: {
-			// 	url: "https://1rpc.io/base",
-			// 	blockNumber: 33113717,
-			// },
+			type: "edr-simulated",
+			chainType: "l1",
+			chainId: 31337,
+			hardfork: "osaka",
 		},
 		ethereum: {
-			url: "https://ethereum.blockpi.network/v1/rpc/public",
-			accounts: accounts_list,
+			type: "http",
+			chainType: "l1",
+			url: process.env.RPC_ETHEREUM ?? "https://ethereum.blockpi.network/v1/rpc/public",
+			accounts: [configVariable("ACCOUNT")],
 		},
 		base: {
-			url: process.env.RPC_BASE || "https://base.llamarpc.com",
-			accounts: accounts_list,
+			type: "http",
+			chainType: "op",
+			url: process.env.RPC_BASE ?? "https://base.llamarpc.com",
+			accounts: [configVariable("ACCOUNT")],
 		},
 		polygon: {
-			url: "https://rpc.ankr.com/polygon",
-			accounts: accounts_list,
+			type: "http",
+			chainType: "generic",
+			url: process.env.RPC_POLYGON ?? "https://rpc.ankr.com/polygon",
+			accounts: [configVariable("ACCOUNT")],
 		},
 	},
-	etherscan: {
-		apiKey: {
-			polygon: "",
-			base: "",
+	verify: {
+		etherscan: {
+			apiKey: configVariable("ETHERSCAN_API_KEY"),
 		},
-		customChains: [],
 	},
 	paths: {
 		artifacts: "./artifacts",
 		cache: "./cache",
 		sources: "./contracts",
-		tests: "./tests",
+		tests: {
+			mocha: "./tests",
+		},
 	},
-}
-
-export default config
+	typechain: {
+		outDir: "./typechain-types",
+	},
+})
