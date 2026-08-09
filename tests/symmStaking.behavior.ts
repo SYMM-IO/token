@@ -1,10 +1,11 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers"
+import type { HardhatEthersSigner as SignerWithAddress } from "@nomicfoundation/hardhat-ethers/types"
 import { expect } from "chai"
-import { ethers } from "hardhat"
-import { ERC20, Symmio, SymmStaking } from "../typechain-types"
-import { e } from "../utils"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
+import { MockERC20, Symmio, SymmStaking } from "../typechain-types/index.js"
+import { e } from "../utils.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { ethers, networkHelpers } from "./hardhat.js"
+
+const { loadFixture, time } = networkHelpers
 
 export function shouldBehaveLikeSymmStaking() {
 	let context: RunContext
@@ -13,8 +14,8 @@ export function shouldBehaveLikeSymmStaking() {
 	let user1: SignerWithAddress
 	let user2: SignerWithAddress
 	let admin: SignerWithAddress
-	let usdtToken: ERC20
-	let usdcToken: ERC20
+	let usdtToken: MockERC20
+	let usdcToken: MockERC20
 
 	beforeEach(async function () {
 		context = await loadFixture(initializeFixture)
@@ -505,7 +506,8 @@ export function shouldBehaveLikeSymmStaking() {
 			await symmStaking.connect(admin).notifyRewardAmount([await usdtToken.getAddress(), await usdcToken.getAddress()], [rewardAmount, rewardAmount])
 
 			const currentBlock = await ethers.provider.getBlock("latest")
-			const afterNotifyTime = currentBlock?.timestamp
+			if (!currentBlock) throw new Error("Latest block was not found")
+			const afterNotifyTime = currentBlock.timestamp
 
 			// User1 withdraws staked tokens
 			const user1StakedBalanceBefore = await stakingToken.balanceOf(user1.address)

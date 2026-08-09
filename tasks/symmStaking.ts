@@ -12,7 +12,7 @@ export default async function deploySymmStaking(
 	{ admin, token, factory, implsalt, proxysalt }: DeploySymmStakingArguments,
 	hre: HardhatRuntimeEnvironment,
 ) {
-		const { ethers } = await hre.network.create()
+		const { ethers } = await hre.network.getOrCreate()
 		for (const [name, address] of Object.entries({ admin, token, factory })) {
 			if (!ethers.isAddress(address) || address === ethers.ZeroAddress) throw new Error(`Invalid required --${name} address`)
 		}

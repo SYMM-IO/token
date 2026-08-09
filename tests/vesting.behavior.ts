@@ -1,10 +1,11 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
-import { ethers, network, upgrades } from "hardhat";
-import { Symmio, SymmVesting, VestingPlanOps__factory } from "../typechain-types";
-import { initializeFixture, RunContext } from "./Initialize.fixture"
 import { Signer } from "ethers";
-import {e} from "../utils"
+import { Symmio, SymmVesting, VestingPlanOps__factory } from "../typechain-types/index.js";
+import {e} from "../utils.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { ethers, network, networkHelpers, upgrades } from "./hardhat.js";
+
+const { loadFixture } = networkHelpers
 
 export function ShouldBehaveLikeVesting() {
 	let context: RunContext
@@ -15,7 +16,7 @@ export function ShouldBehaveLikeVesting() {
 
 	beforeEach(async () => {
 		context = await loadFixture(initializeFixture)
-		symmVesting = await context.vesting
+		symmVesting = context.vesting as unknown as SymmVesting
 		vestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
 		symmToken = context.symmioToken
 		admin = context.signers.admin
@@ -448,10 +449,10 @@ export function ShouldBehaveLikeVesting() {
 			const zeroAddress = "0x0000000000000000000000000000000000000000";
 			await expect(symmVesting.connect(admin).initialize(admin, admin,
 				zeroAddress, zeroAddress, zeroAddress, zeroAddress, zeroAddress, zeroAddress, zeroAddress))
-				.to.be.reverted
+				.to.revert(ethers)
 			const adminAdress = await admin.getAddress()
 			await expect(symmVesting.connect(admin).__vesting_init(adminAdress, adminAdress, adminAdress))
-				.to.be.reverted
+				.to.revert(ethers)
 		})
 
 		it('should fail when zero is passed as address to symmVesting initialize method', async()=>{

@@ -10,7 +10,7 @@ export default async function setupSymmVestingPlanInitializer(
 	{ deployedAddress }: SetupSymmVestingPlanInitializerArguments,
 	hre: HardhatRuntimeEnvironment,
 ) {
-			const { ethers } = await hre.network.create();
+			const { ethers } = await hre.network.getOrCreate();
 			console.log("Setup SymmVestingPlanInitializer");
 
 			const signers = await ethers.getSigners();

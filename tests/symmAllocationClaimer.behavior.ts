@@ -1,9 +1,11 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
-import { SymmAllocationClaimer, Symmio } from "../typechain-types"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
-import { e } from "../utils"
 import { AddressLike, ZeroAddress } from "ethers"
+import { SymmAllocationClaimer, Symmio } from "../typechain-types/index.js"
+import { e } from "../utils.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { networkHelpers } from "./hardhat.js"
+
+const { loadFixture } = networkHelpers
 
 export function shouldBehaveLikeSymmAllocationClaimer() {
 	let context: RunContext

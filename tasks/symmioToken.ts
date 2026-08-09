@@ -10,7 +10,7 @@ export default async function deploySymmioToken(
 	{ name, symbol, admin }: DeploySymmioTokenArguments,
 	hre: HardhatRuntimeEnvironment,
 ) {
-	const { ethers } = await hre.network.create()
+	const { ethers } = await hre.network.getOrCreate()
 	if (name.length === 0) throw new Error("Missing required --name option")
 	if (symbol.length === 0) throw new Error("Missing required --symbol option")
 	if (!ethers.isAddress(admin) || admin === ethers.ZeroAddress) throw new Error("Invalid required --admin address")

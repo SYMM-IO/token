@@ -13,7 +13,7 @@ export default async function deploySymmVestingPlanInitializer(
 	{ symmTokenAddress, symmVestingAddress, totalInitiatableSYMM, launchTimeStamp }: DeploySymmVestingPlanInitializerArguments,
 	hre: HardhatRuntimeEnvironment,
 ) {
-			const { ethers } = await hre.network.create();
+			const { ethers } = await hre.network.getOrCreate();
 			console.log("deploy:SymmVestingPlanInitializer");
 
 			const signers = await ethers.getSigners();

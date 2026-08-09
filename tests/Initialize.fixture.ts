@@ -1,5 +1,4 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
-import { ethers, run } from "hardhat"
+import type { HardhatEthersSigner as SignerWithAddress } from "@nomicfoundation/hardhat-ethers/types"
 import {
 	SymmAllocationClaimer,
 	Symmio,
@@ -8,7 +7,8 @@ import {
 	SymmStaking,
 	SymmVestingPlanInitializer,
 	VestingV2,
-} from "../typechain-types"
+} from "../typechain-types/index.js"
+import { ethers, hre } from "./hardhat.js"
 
 export class RunContext {
 	signers!: {
@@ -42,13 +42,13 @@ export async function initializeFixture(): Promise<RunContext> {
 		vestingPenaltyReceiver: signers[5],
 	}
 
-	context.symmioToken = await run("deploy:SymmioToken", {
+	context.symmioToken = await hre.tasks.getTask("deploy:SymmioToken").run({
 		name: "SYMMIO",
 		symbol: "SYMM",
 		admin: await context.signers.admin.getAddress(),
 	})
 
-	context.claimSymm = await run("deploy:SymmAllocationClaimer", {
+	context.claimSymm = await hre.tasks.getTask("deploy:SymmAllocationClaimer").run({
 		admin: await context.signers.admin.getAddress(),
 		setter: await context.signers.setter.getAddress(),
 		token: await context.symmioToken.getAddress(),
@@ -56,7 +56,7 @@ export async function initializeFixture(): Promise<RunContext> {
 		mintFactor: "500000000000000000", //5e17 => %50
 	})
 
-	// context.vesting = await run("deploy:vesting", {
+	// context.vesting = await hre.tasks.getTask("deploy:vesting").run({
 	// 	admin: await context.signers.admin.getAddress(),
 	// 	penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
 	// 	pool: Process.env.POOL,
@@ -71,7 +71,7 @@ export async function initializeFixture(): Promise<RunContext> {
 	// 	proxysalt: "2",
 	// })
 
-	// context.vesting = await run("deploy:vestingV2", {
+	// context.vesting = await hre.tasks.getTask("deploy:vestingV2").run({
 	// 	admin: await context.signers.admin.getAddress(),
 	// 	penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
 	// 	pool: Process.env.POOL,
@@ -86,24 +86,24 @@ export async function initializeFixture(): Promise<RunContext> {
 	// 	proxysalt: "2",
 	// })
 
-	// context.symmStaking = await run("deploy:SymmStaking", {
+	// context.symmStaking = await hre.tasks.getTask("deploy:SymmStaking").run({
 	// 	admin: await context.signers.admin.getAddress(),
 	// 	token: await context.symmioToken.getAddress(),
 	// 	factory: Process.env.FACTORY,
 	// })
 
-	// context.symmVestingVlanInitializer = await run("deploy:SymmVestingPlanInitializer", {
+	// context.symmVestingVlanInitializer = await hre.tasks.getTask("deploy:SymmVestingPlanInitializer").run({
 	// 	symmTokenAddress: await context.symmioToken.getAddress(),
 	// 	symmVestingAddress: await context.vesting.getAddress(),
 	// 	totalInitiatableSYMM: "1000000000000000000000000000", //10Me18
 	// 	launchTimeStamp: String(floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
 	// })
 
-	context.symmioBuildersNft = await run("deploy:SymmioBuildersNft", {
+	context.symmioBuildersNft = await hre.tasks.getTask("deploy:SymmioBuildersNft").run({
 		admin: await context.signers.admin.getAddress(),
 	})
 
-	context.symmioBuildersNftManager = await run("deploy:SymmioBuildersNftManager", {
+	context.symmioBuildersNftManager = await hre.tasks.getTask("deploy:SymmioBuildersNftManager").run({
 		symm: await context.symmioToken.getAddress(),
 		nft: await context.symmioBuildersNft.getAddress(),
 		admin: await context.signers.admin.getAddress(),

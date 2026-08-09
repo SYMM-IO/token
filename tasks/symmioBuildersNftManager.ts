@@ -43,7 +43,7 @@ export async function deploySymmioBuildersNftManager(
 		symm,
 		nft,
 		admin,
-		proxyadminowner: args.proxyadminowner ?? "signer default",
+		proxyadminowner: args.proxyadminowner || "signer default",
 		minLockAmount,
 		cliffDuration,
 		vestingDuration,
@@ -91,7 +91,7 @@ export default async function deploySymmioBuildersNftManagerTask(
 	args: SymmioBuildersNftManagerDeploymentArgs,
 	hre: HardhatRuntimeEnvironment,
 ) {
-	const connection = await hre.network.create()
+	const connection = await hre.network.getOrCreate()
 	const upgradesApi = await upgrades(hre, connection)
 	const result = await deploySymmioBuildersNftManager(args, connection.ethers, upgradesApi)
 	return result.contract

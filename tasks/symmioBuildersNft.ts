@@ -9,7 +9,7 @@ export default async function deploySymmioBuildersNft(
 	{ admin }: DeploySymmioBuildersNftArguments,
 	hre: HardhatRuntimeEnvironment,
 ) {
-	const connection = await hre.network.create()
+	const connection = await hre.network.getOrCreate()
 	const { ethers } = connection
 	const upgradesApi = await upgrades(hre, connection)
 	if (!ethers.isAddress(admin) || admin === ethers.ZeroAddress) throw new Error("Invalid required --admin address")

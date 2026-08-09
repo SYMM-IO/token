@@ -1,17 +1,18 @@
-import { loadFixture, setBalance, time } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
 import { Signer } from "ethers"
-import { ethers, network, upgrades } from "hardhat"
-import { ERC20, Symmio, SymmVesting, VestingPlanOps__factory } from "../typechain-types"
-import { e } from "../utils"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
+import { MockERC20, Symmio, SymmVesting, VestingPlanOps__factory } from "../typechain-types/index.js"
+import { e } from "../utils.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { ethers, network, networkHelpers, upgrades } from "./hardhat.js"
+
+const { loadFixture, setBalance, time } = networkHelpers
 
 export function shouldBehaveLikeSymmVesting() {
 	let symmVesting: SymmVesting
 	let symmToken: Symmio
-	let erc20: ERC20
+	let erc20: MockERC20
 	let owner: Signer, admin: Signer, user1: Signer, user2: Signer, vestingPenaltyReceiver: Signer, usdcWhale: Signer
-	let pool: String
+	let pool: string
 	let context: RunContext
 	let VestingPlanOps: VestingPlanOps__factory
 	let user1UsdcAmount: bigint
@@ -26,7 +27,7 @@ export function shouldBehaveLikeSymmVesting() {
 
 	beforeEach(async () => {
 		context = await loadFixture(initializeFixture)
-		symmVesting = await context.vesting
+		symmVesting = context.vesting as unknown as SymmVesting
 		VestingPlanOps = await ethers.getContractFactory("VestingPlanOps")
 
 		admin = context.signers.admin
@@ -44,7 +45,7 @@ export function shouldBehaveLikeSymmVesting() {
 		const TokenFactory = await ethers.getContractFactory("Symmio")
 		const ERC20Factory = await ethers.getContractFactory("MockERC20")
 		symmToken = TokenFactory.attach("0x800822d361335b4d5F352Dac293cA4128b5B605f") as Symmio
-		erc20 = ERC20Factory.attach("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") as ERC20
+		erc20 = ERC20Factory.attach("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913") as MockERC20
 
 		const vestingPlanOps = await VestingPlanOps.deploy()
 		await vestingPlanOps.waitForDeployment()
@@ -319,14 +320,14 @@ export function shouldBehaveLikeSymmVesting() {
 
 			const unlockedSymmBefore = await symmVesting.getClaimableAmountsForToken(user1, symmToken)
 			const userSymmBalanceBefore = await symmToken.balanceOf(user1)
-			await symmVesting.connect(user1).claimUnlockedToken(symmToken, user1)
+			await symmVesting.connect(user1).claimUnlockedToken(symmToken)
 			const userSymmBalanceAfter = await symmToken.balanceOf(user1)
 			const unlockedSymmAfter = await symmVesting.getClaimableAmountsForToken(user1, symmToken)
 			await expect(unlockedSymmAfter).to.be.lessThan(unlockedSymmBefore)
 			await expect(userSymmBalanceAfter).to.be.greaterThan(userSymmBalanceBefore)
 
 			const unlockedLPBefore = await symmVesting.getClaimableAmountsForToken(user1, pool)
-			await symmVesting.connect(user1).claimUnlockedToken(pool, user1)
+			await symmVesting.connect(user1).claimUnlockedToken(pool)
 			const unlockedLPAfter = await symmVesting.getClaimableAmountsForToken(user1, pool)
 			await expect(unlockedLPAfter).to.be.lessThan(unlockedLPBefore)
 		})

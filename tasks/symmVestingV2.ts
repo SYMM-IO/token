@@ -29,7 +29,7 @@ export default async function deploySymmVestingV2({
 						  implsalt,
 						  proxysalt,
 					  }: DeploySymmVestingV2Arguments, hre: HardhatRuntimeEnvironment) {
-		const { ethers } = await hre.network.create();
+		const { ethers } = await hre.network.getOrCreate();
 		for (const [name, address] of Object.entries({ admin, penaltyreceiver, pool, router, permit2, vault, symm, usdc, lp, factory })) {
 			if (!ethers.isAddress(address) || address === ethers.ZeroAddress) throw new Error(`Invalid required --${name} address`);
 		}

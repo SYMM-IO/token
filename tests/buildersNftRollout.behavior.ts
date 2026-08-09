@@ -3,14 +3,13 @@ import os from "node:os"
 import path from "node:path"
 
 import { expect } from "chai"
-import hre, { artifacts, ethers, upgrades } from "hardhat"
-
-import { loadRolloutConfig, requireManagerDeploymentConfig } from "../scripts/builders-nft/lib/config"
-import { scanAccessControlMembers } from "../scripts/builders-nft/lib/onchain"
-import { resolveConfiguredSigner } from "../scripts/builders-nft/lib/signer"
-import { bindRolloutState, loadRolloutState, saveRolloutState } from "../scripts/builders-nft/lib/state"
-import { findCompiledStorageLayout, loadStorageBaseline, validateNftUpgrade } from "../scripts/builders-nft/lib/upgradeValidation"
-import { deploySymmioBuildersNftManager } from "../tasks/symmioBuildersNftManager"
+import { loadRolloutConfig, requireManagerDeploymentConfig } from "../scripts/builders-nft/lib/config.js"
+import { scanAccessControlMembers } from "../scripts/builders-nft/lib/onchain.js"
+import { resolveConfiguredSigner } from "../scripts/builders-nft/lib/signer.js"
+import { bindRolloutState, loadRolloutState, saveRolloutState } from "../scripts/builders-nft/lib/state.js"
+import { findCompiledStorageLayout, loadStorageBaseline, validateNftUpgrade } from "../scripts/builders-nft/lib/upgradeValidation.js"
+import { deploySymmioBuildersNftManager } from "../tasks/symmioBuildersNftManager.js"
+import { artifacts, ethers, upgrades } from "./hardhat.js"
 
 describe("Builders NFT rollout tooling", () => {
 	const configFile = path.resolve("scripts/builders-nft/config/builders-nft.base.json")
@@ -131,7 +130,8 @@ describe("Builders NFT rollout tooling", () => {
 				proxyadminowner: proxyAdminOwner.address,
 				grantroles: false,
 			},
-			hre,
+			ethers,
+			upgrades,
 			deployer,
 		)
 		const proxyAdmin = new ethers.Contract(deployment.proxyAdminAddress, ["function owner() view returns (address)"], ethers.provider)

@@ -1,8 +1,10 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
-import { Symmio } from "../typechain-types"
-import { e } from "../utils"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
+import { Symmio } from "../typechain-types/index.js"
+import { e } from "../utils.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { networkHelpers } from "./hardhat.js"
+
+const { loadFixture } = networkHelpers
 
 export function shouldBehaveLikeSymmioToken() {
 	let context: RunContext

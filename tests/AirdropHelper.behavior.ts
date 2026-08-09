@@ -1,8 +1,9 @@
-import { setBalance } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
 import { Signer } from "ethers"
-import { ethers, network } from "hardhat"
-import { AirdropHelper, Symmio } from "../typechain-types"
+import { AirdropHelper, Symmio } from "../typechain-types/index.js"
+import { ethers, network, networkHelpers } from "./hardhat.js"
+
+const { setBalance } = networkHelpers
 
 export function shouldBehaveLikeAirdropHelper(): void {
 	// Contract instances

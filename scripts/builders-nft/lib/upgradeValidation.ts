@@ -17,6 +17,16 @@ export type NftStorageBaseline = {
 	storageLayout: StorageLayout
 }
 
+type CompilerOutput = {
+	output?: {
+		contracts?: Record<string, Record<string, { storageLayout?: StorageLayout }>>
+	}
+}
+
+type BuildInfo = CompilerOutput & {
+	userSourceNameMap?: Record<string, string>
+}
+
 export function loadStorageBaseline(file: string): NftStorageBaseline {
 	if (!fs.existsSync(file)) throw new Error(`Storage baseline does not exist: ${file}`)
 	const baseline = JSON.parse(fs.readFileSync(file, "utf8")) as NftStorageBaseline
@@ -31,13 +41,20 @@ export function findCompiledStorageLayout(contractFqn: string, buildInfoDirector
 
 	const files = fs
 		.readdirSync(buildInfoDirectory)
-		.filter(file => file.endsWith(".json"))
+		.filter(file => file.endsWith(".json") && !file.endsWith(".output.json"))
 		.map(file => path.join(buildInfoDirectory, file))
 		.sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs)
 	for (const file of files) {
-		const buildInfo = JSON.parse(fs.readFileSync(file, "utf8")) as any
-		const layout = buildInfo.output?.contracts?.[sourceName]?.[contractName]?.storageLayout
-		if (layout) return layout as StorageLayout
+		const buildInfo = JSON.parse(fs.readFileSync(file, "utf8")) as BuildInfo
+		const hardhat2Layout = buildInfo.output?.contracts?.[sourceName]?.[contractName]?.storageLayout
+		if (hardhat2Layout) return hardhat2Layout
+
+		const outputFile = file.replace(/\.json$/, ".output.json")
+		if (!fs.existsSync(outputFile)) continue
+		const compilerOutput = JSON.parse(fs.readFileSync(outputFile, "utf8")) as CompilerOutput
+		const compilerSourceName = buildInfo.userSourceNameMap?.[sourceName] ?? sourceName
+		const hardhat3Layout = compilerOutput.output?.contracts?.[compilerSourceName]?.[contractName]?.storageLayout
+		if (hardhat3Layout) return hardhat3Layout
 	}
 	throw new Error(`Storage layout not found for ${contractFqn}; run hardhat compile --force first`)
 }

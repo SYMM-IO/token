@@ -1,13 +1,14 @@
 /* eslint-disable node/no-missing-import */
 import { expect } from "chai"
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers"
-import { SymmVestingPlanInitializer, Vesting } from "../typechain-types"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
-import { ethers } from "hardhat"
-import { NumberLike } from "@nomicfoundation/hardhat-network-helpers/dist/src/types"
+import type { HardhatEthersSigner as SignerWithAddress } from "@nomicfoundation/hardhat-ethers/types"
+import { NumberLike } from "@nomicfoundation/hardhat-network-helpers/types"
 import { BigNumberish } from "ethers"
-import { e } from "../utils"
+import { SymmVestingPlanInitializer, Vesting } from "../typechain-types/index.js"
+import { e } from "../utils.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { ethers, networkHelpers } from "./hardhat.js"
+
+const { loadFixture, time } = networkHelpers
 
 export function shouldBehaveLikeSymmVestingPlanInitializer() {
 	let context: RunContext
@@ -36,7 +37,7 @@ export function shouldBehaveLikeSymmVestingPlanInitializer() {
 		})
 
 		it("should reject callers without SETTER_ROLE", async () => {
-			await expect(vestingPlanInitializer.connect(user1).setPendingAmounts([user1.address], [1000])).to.be.reverted
+			await expect(vestingPlanInitializer.connect(user1).setPendingAmounts([user1.address], [1000])).to.revert(ethers)
 		})
 
 		it("should register user allocations correctly", async () => {
@@ -80,7 +81,7 @@ export function shouldBehaveLikeSymmVestingPlanInitializer() {
 		})
 
 		it("should revert if launch time is not reached", async () => {
-			await expect(vestingPlanInitializer.connect(user1).startVesting()).to.be.reverted
+			await expect(vestingPlanInitializer.connect(user1).startVesting()).to.revert(ethers)
 		})
 
 		it("should allow user to initiate it's vesting plan when admin has allowed him", async () => {

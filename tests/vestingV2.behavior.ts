@@ -1,10 +1,11 @@
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
-import { ethers, network, upgrades } from "hardhat";
-import { Symmio, SymmVestingV2, VestingPlanOps__factory } from "../typechain-types";
-import { initializeFixture, RunContext } from "./Initialize.fixture";
 import { Signer } from "ethers";
-import { e } from "../utils";
+import { Symmio, SymmVestingV2, VestingPlanOps__factory } from "../typechain-types/index.js";
+import { e } from "../utils.js";
+import { initializeFixture, RunContext } from "./Initialize.fixture.js";
+import { ethers, network, networkHelpers, upgrades } from "./hardhat.js";
+
+const { loadFixture } = networkHelpers
 
 export function ShouldBehaveLikeVestingV2() {
 	let context: RunContext;
@@ -15,7 +16,7 @@ export function ShouldBehaveLikeVestingV2() {
 
 	beforeEach(async () => {
 		context = await loadFixture(initializeFixture);
-		symmVesting = await context.vesting;
+		symmVesting = context.vesting as unknown as SymmVestingV2;
 		vestingPlanOps = await ethers.getContractFactory("VestingPlanOps");
 		symmToken = context.symmioToken;
 		admin = context.signers.admin;

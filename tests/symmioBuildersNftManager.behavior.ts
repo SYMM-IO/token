@@ -1,10 +1,11 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers"
+import type { HardhatEthersSigner as SignerWithAddress } from "@nomicfoundation/hardhat-ethers/types"
 import { expect } from "chai"
-import { ethers } from "hardhat"
 
-import { Symmio, SymmioBuildersNft, SymmioBuildersNftManager } from "../typechain-types"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
+import { Symmio, SymmioBuildersNft, SymmioBuildersNftManager } from "../typechain-types/index.js"
+import { initializeFixture, RunContext } from "./Initialize.fixture.js"
+import { ethers, networkHelpers } from "./hardhat.js"
+
+const { loadFixture, time } = networkHelpers
 
 export function shouldBehaveLikeSymmioBuildersNftManager() {
 	let context: RunContext
