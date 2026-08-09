@@ -6,8 +6,8 @@ import { expect } from "chai"
 import hre, { artifacts, ethers, upgrades } from "hardhat"
 
 import { loadRolloutConfig, requireManagerDeploymentConfig } from "../scripts/builders-nft/lib/config"
-import { buildLedgerCandidates, scanLedgerApp } from "../scripts/builders-nft/lib/ledger"
 import { scanAccessControlMembers } from "../scripts/builders-nft/lib/onchain"
+import { resolveConfiguredSigner } from "../scripts/builders-nft/lib/signer"
 import { bindRolloutState, loadRolloutState, saveRolloutState } from "../scripts/builders-nft/lib/state"
 import { findCompiledStorageLayout, loadStorageBaseline, validateNftUpgrade } from "../scripts/builders-nft/lib/upgradeValidation"
 import { deploySymmioBuildersNftManager } from "../tasks/symmioBuildersNftManager"
@@ -16,31 +16,57 @@ describe("Builders NFT rollout tooling", () => {
 	const configFile = path.resolve("scripts/builders-nft/config/builders-nft.base.json")
 	const baselineFile = path.resolve("scripts/builders-nft/config/symmio-builders-nft-v1.baseline.json")
 
-	it("builds deterministic, de-duplicated Ledger candidates and persists the matched ID", async () => {
-		const scan = {
-			accountCount: 2,
-			addressCount: 2,
-			extraPaths: ["m/44'/60'/0'/0/0", "m/44'/60'/9'/0/0"],
+	it("verifies a private-key environment signer without persisting the key", async () => {
+		const wallet = ethers.Wallet.createRandom()
+		const environmentVariable = "BUILDERS_NFT_TEST_PRIVATE_KEY"
+		const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "builders-nft-signer-"))
+		const stateFile = path.join(temporaryDirectory, "state.json")
+		const state = bindRolloutState({}, { chainId: 31337, networkName: "hardhat", configFile })
+		process.env[environmentVariable] = wallet.privateKey
+		try {
+			const signer = await resolveConfiguredSigner({
+				role: "testSigner",
+				config: { type: "privateKeyEnv", address: wallet.address, privateKeyEnv: environmentVariable },
+				provider: ethers.provider,
+				state,
+				stateFile,
+			})
+			expect(await signer.getAddress()).to.equal(wallet.address)
+			const persisted = fs.readFileSync(stateFile, "utf8")
+			expect(persisted).not.to.include(wallet.privateKey)
+			expect(loadRolloutState(stateFile).signers?.testSigner).to.include({
+				address: wallet.address,
+				type: "privateKeyEnv",
+				privateKeyEnv: environmentVariable,
+			})
+		} finally {
+			delete process.env[environmentVariable]
 		}
-		const candidates = buildLedgerCandidates(scan)
-		expect(candidates.map(candidate => candidate.id)).to.deep.equal(candidates.map((_, index) => index))
-		expect(new Set(candidates.map(candidate => candidate.path)).size).to.equal(candidates.length)
+	})
 
-		const expected = ethers.Wallet.createRandom().address
-		const other = ethers.Wallet.createRandom().address
-		const matchedCandidate = candidates[3]
-		const discovery = await scanLedgerApp(
-			{
-				getAddress: async ledgerPath => ({ address: ledgerPath === matchedCandidate.path ? expected : other }),
-				signTransaction: async () => {
-					throw new Error("not called")
-				},
-			},
-			expected,
-			scan,
-		)
-		expect(discovery.candidateId).to.equal(matchedCandidate.id)
-		expect(discovery.path).to.equal(matchedCandidate.path)
+	it("rejects a private key that does not match the configured signer", async () => {
+		const expected = ethers.Wallet.createRandom()
+		const supplied = ethers.Wallet.createRandom()
+		const environmentVariable = "BUILDERS_NFT_TEST_MISMATCH_KEY"
+		const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "builders-nft-signer-"))
+		process.env[environmentVariable] = supplied.privateKey
+		try {
+			let failure: Error | undefined
+			try {
+				await resolveConfiguredSigner({
+					role: "testSigner",
+					config: { type: "privateKeyEnv", address: expected.address, privateKeyEnv: environmentVariable },
+					provider: ethers.provider,
+					state: {},
+					stateFile: path.join(temporaryDirectory, "state.json"),
+				})
+			} catch (error) {
+				failure = error as Error
+			}
+			expect(failure?.message).to.include("derives")
+		} finally {
+			delete process.env[environmentVariable]
+		}
 	})
 
 	it("binds persisted state to one chain and config", () => {
@@ -70,6 +96,15 @@ describe("Builders NFT rollout tooling", () => {
 
 	it("requires every economic and authority value before manager deployment", () => {
 		const { config } = loadRolloutConfig(configFile)
+		expect(config.schemaVersion).to.equal(2)
+		expect(config.signers.deployer).to.include({
+			type: "privateKeyEnv",
+			privateKeyEnv: "BUILDERS_NFT_DEPLOYER_PRIVATE_KEY",
+		})
+		expect(config.signers.nftProxyAdminOwner).to.include({
+			type: "privateKeyEnv",
+			privateKeyEnv: "BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY",
+		})
 		expect(config.upgrade.acceptedRemovedFunctions).to.deep.equal(["lockData(uint256)"])
 		expect(() => requireManagerDeploymentConfig(config)).to.throw("manager.penaltyRate")
 	})

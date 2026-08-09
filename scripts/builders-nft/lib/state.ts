@@ -1,15 +1,12 @@
 import fs from "node:fs"
 import path from "node:path"
 
-export type LedgerDiscovery = {
+export type SignerVerification = {
 	expectedAddress: string
 	address: string
-	path: string
-	candidateId: number
-	scheme: string
-	accountIndex?: number
-	addressIndex?: number
-	discoveredAt: string
+	type: "privateKeyEnv"
+	privateKeyEnv: string
+	verifiedAt: string
 }
 
 export type NftSnapshot = {
@@ -33,7 +30,7 @@ export type RolloutState = {
 		networkName: string
 		configFile: string
 	}
-	ledger?: Record<string, LedgerDiscovery>
+	signers?: Record<string, SignerVerification>
 	nftUpgrade?: {
 		oldImplementation?: string
 		newImplementation?: string
@@ -84,6 +81,6 @@ export function bindRolloutState(state: RolloutState, expected: { chainId: numbe
 		}
 	}
 	state.metadata = expected
-	state.ledger ??= {}
+	state.signers ??= {}
 	return state
 }

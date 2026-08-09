@@ -1,10 +1,10 @@
 # Builders NFT Base rollout
 
-These scripts deploy the fresh `SymmioBuildersNftManager`, upgrade the existing Builders NFT proxy, and prepare the role grants without putting private keys in Hardhat or source control. Addresses, economic parameters, authority expectations, file locations, and Ledger scan ranges come from one JSON file. Runtime progress and discovered Ledger candidate IDs are written atomically to an ignored state JSON so interrupted runs can be resumed safely.
+These scripts deploy the fresh `SymmioBuildersNftManager`, upgrade the existing Builders NFT proxy, and prepare the role grants without putting private keys in JSON, Hardhat configuration, logs, or source control. Addresses, economic parameters, authority expectations, environment-variable names, and file locations come from one JSON file. Runtime progress and signer verification metadata are written atomically to an ignored state JSON so interrupted runs can be resumed safely.
 
 ## Authority and transaction split
 
-The configured deployer `0x00c2796b3AD3369D604E009D75204D7a15Cc584b` may deploy implementations, the manager proxy, and its dedicated ProxyAdmin. It cannot upgrade the existing NFT proxy or grant the manager its live token roles:
+The configured software-wallet deployer `0x00c2796b3AD3369D604E009D75204D7a15Cc584b` may deploy implementations, the manager proxy, and its dedicated ProxyAdmin. It cannot upgrade the existing NFT proxy or grant the manager its live token roles:
 
 - The existing NFT `ProxyAdmin.owner()` upgrades the NFT and the NFT `DEFAULT_ADMIN_ROLE` grants its four manager roles.
 - The SYMM timelock schedules and later executes the manager's `MINTER_ROLE` grant.
@@ -33,36 +33,65 @@ Set the config path for every command:
 export BUILDERS_NFT_CONFIG="$PWD/scripts/builders-nft/config/builders-nft.base.json"
 ```
 
-## 2. Compile and install optional Ledger transport
+The config records only the environment-variable names used for the two software-wallet keys:
 
-The Ledger packages are loaded only when signing. Install them without modifying `package.json` or `package-lock.json`:
+```json
+"signers": {
+  "deployer": {
+    "type": "privateKeyEnv",
+    "address": "0x00c2796b3AD3369D604E009D75204D7a15Cc584b",
+    "privateKeyEnv": "BUILDERS_NFT_DEPLOYER_PRIVATE_KEY"
+  },
+  "nftProxyAdminOwner": {
+    "type": "privateKeyEnv",
+    "address": "0xf12239317e985f6772f86407608b166efa3e2f05",
+    "privateKeyEnv": "BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY"
+  }
+}
+```
+
+## 2. Compile and verify software-wallet signers
 
 ```bash
-npm install --no-save --package-lock=false @ledgerhq/hw-transport-node-hid-noevents @ledgerhq/hw-app-eth
 npx hardhat compile --force
 ```
 
-Unlock the Ledger, open the Ethereum application, and connect only the device for the requested signer. Candidate schemes and scan counts come from JSON. The first match is saved with its numeric `candidateId`, exact derivation path, scheme, and indices:
+Load a private key without putting it in shell history. The value may include or omit the `0x` prefix:
 
 ```bash
-LEDGER_ROLE=deployer npx hardhat run scripts/builders-nft/discoverLedger.ts --network base
-LEDGER_ROLE=nftProxyAdminOwner npx hardhat run scripts/builders-nft/discoverLedger.ts --network base
+read -rsp "Deployer private key: " BUILDERS_NFT_DEPLOYER_PRIVATE_KEY; echo
+export BUILDERS_NFT_DEPLOYER_PRIVATE_KEY
+SIGNER_ROLE=deployer npx hardhat run scripts/builders-nft/verifySigner.ts --network base
+unset BUILDERS_NFT_DEPLOYER_PRIVATE_KEY
 ```
 
-The second command can be run by the NFT admin separately. It is optional because each execution script automatically scans and persists its required Ledger signer before signing.
+Verify the NFT admin separately:
+
+```bash
+read -rsp "NFT admin private key: " BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY; echo
+export BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY
+SIGNER_ROLE=nftProxyAdminOwner npx hardhat run scripts/builders-nft/verifySigner.ts --network base
+unset BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY
+```
+
+The verifier derives the address locally and refuses a mismatch. The ignored state JSON records the verified address, signer type, environment-variable name, and timestamp, but never the key. Verification is optional because every transaction script repeats the same address derivation check immediately before signing.
 
 ## 3. Preview, then upgrade the NFT
 
-Preview mode performs live proxy/admin/owner/code-hash checks, compares the old storage layout and ABI with the current artifact, and saves a complete pre-upgrade NFT state snapshot. It sends no transaction and does not open the Ledger:
+Preview mode performs live proxy/admin/owner/code-hash checks, compares the old storage layout and ABI with the current artifact, and saves a complete pre-upgrade NFT state snapshot. It sends no transaction and does not read either private-key environment variable:
 
 ```bash
 npx hardhat run scripts/builders-nft/upgradeNft.ts --network base
 ```
 
-Execution deploys the implementation with the deployer Ledger, then opens/scans the Ledger belonging to the discovered live ProxyAdmin owner for `upgradeAndCall`. If those are different devices, rerun after the implementation deployment with the owner device connected; the saved implementation is verified and reused.
+Execution deploys the implementation with the configured deployer key and calls `upgradeAndCall` with the configured NFT ProxyAdmin-owner key. Both supplied keys are derived and checked against the configured and discovered on-chain addresses before use.
 
 ```bash
+read -rsp "Deployer private key: " BUILDERS_NFT_DEPLOYER_PRIVATE_KEY; echo
+read -rsp "NFT admin private key: " BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY; echo
+export BUILDERS_NFT_DEPLOYER_PRIVATE_KEY BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY
 EXECUTE=true CONFIRM_CHAIN_ID=8453 npx hardhat run scripts/builders-nft/upgradeNft.ts --network base
+unset BUILDERS_NFT_DEPLOYER_PRIVATE_KEY BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY
 ```
 
 After the upgrade, the script verifies the EIP-1967 implementation slot and requires the full supply, token owners, lock data, pause flags, and access-control membership snapshot to be byte-for-byte equivalent to the pre-upgrade snapshot.
@@ -73,7 +102,10 @@ The manager is a fresh transparent proxy; it is not an upgrade of any live manag
 
 ```bash
 npx hardhat run scripts/builders-nft/deployManager.ts --network base
+read -rsp "Deployer private key: " BUILDERS_NFT_DEPLOYER_PRIVATE_KEY; echo
+export BUILDERS_NFT_DEPLOYER_PRIVATE_KEY
 EXECUTE=true CONFIRM_CHAIN_ID=8453 npx hardhat run scripts/builders-nft/deployManager.ts --network base
+unset BUILDERS_NFT_DEPLOYER_PRIVATE_KEY
 ```
 
 Execution reuses the existing manager deployment task, disables its legacy inline role grants, sets the dedicated ProxyAdmin owner explicitly, verifies all initializer getters and ownership on-chain, then records the proxy, implementation, ProxyAdmin, owner, and transaction hash in state.
@@ -97,15 +129,19 @@ Preview and execute the NFT grants from that generated JSON:
 
 ```bash
 npx hardhat run scripts/builders-nft/grantNftRoles.ts --network base
+read -rsp "NFT admin private key: " BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY; echo
+export BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY
 EXECUTE=true CONFIRM_CHAIN_ID=8453 npx hardhat run scripts/builders-nft/grantNftRoles.ts --network base
+unset BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY
 ```
 
 Submit the generated timelock `scheduleTransaction` through an eligible proposer workflow, wait at least `minimumDelay`, then submit `executeTransaction` through an eligible executor workflow. Those governance transactions are intentionally not auto-signed by the deployer script.
 
 ## Safety properties
 
-- No private key is read by these rollout scripts.
-- No address, deployment parameter, scan bound, accepted ABI removal, or output path is embedded in executable source.
+- Private keys are read only from the environment-variable names declared in JSON; they are never printed or persisted.
+- Every supplied key must derive the exact configured signer address before any transaction is constructed.
+- No address, deployment parameter, environment-variable name, accepted ABI removal, or output path is embedded in executable source.
 - Transaction execution needs both `EXECUTE=true` and the exact configured `CONFIRM_CHAIN_ID`.
 - The scripts discover and verify the existing NFT implementation, ProxyAdmin, and owner from EIP-1967/on-chain calls before acting.
 - Saved addresses are never trusted without live bytecode, ownership, runtime-hash, getter, or role verification.

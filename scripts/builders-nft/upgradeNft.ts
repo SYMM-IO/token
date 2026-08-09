@@ -3,8 +3,8 @@ import hre from "hardhat"
 
 import { loadRolloutConfig } from "./lib/config"
 import { executionEnabled, prepareRolloutContext } from "./lib/execution"
-import { resolveLedgerSigner } from "./lib/ledger"
 import { readOwnableOwner, readProxyAdmin, readProxyImplementation, requireCode, runtimeCodeHash, snapshotNft } from "./lib/onchain"
+import { resolveConfiguredSigner } from "./lib/signer"
 import { saveRolloutState } from "./lib/state"
 import { findCompiledStorageLayout, loadStorageBaseline, validateNftUpgrade } from "./lib/upgradeValidation"
 
@@ -107,11 +107,10 @@ async function main() {
 
 	let newImplementation = savedNewImplementation
 	if (!newImplementation) {
-		const deployer = await resolveLedgerSigner({
+		const deployer = await resolveConfiguredSigner({
 			role: "deployer",
-			expectedAddress: config.signers.deployer.address,
+			config: config.signers.deployer,
 			provider,
-			scan: config.ledger.scan,
 			state,
 			stateFile: loaded.stateFile,
 		})
@@ -137,14 +136,15 @@ async function main() {
 		if (implementationBeforeUpgrade !== expectedOldImplementation) {
 			throw new Error(`NFT proxy changed to unexpected implementation ${implementationBeforeUpgrade}`)
 		}
-		const adminSigner = await resolveLedgerSigner({
+		const adminSigner = await resolveConfiguredSigner({
 			role: "nftProxyAdminOwner",
-			expectedAddress: proxyAdminOwner,
+			config: config.signers.nftProxyAdminOwner,
 			provider,
-			scan: config.ledger.scan,
 			state,
 			stateFile: loaded.stateFile,
 		})
+		if ((await adminSigner.getAddress()) !== proxyAdminOwner)
+			throw new Error("Configured NFT admin signer does not match discovered ProxyAdmin owner")
 		const proxyAdminContract = new Contract(
 			proxyAdmin,
 			["function upgradeAndCall(address proxy,address implementation,bytes data) payable"],

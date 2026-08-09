@@ -4,8 +4,8 @@ import hre from "hardhat"
 import { deploySymmioBuildersNftManager } from "../../tasks/symmioBuildersNftManager"
 import { loadRolloutConfig, requireManagerDeploymentConfig } from "./lib/config"
 import { executionEnabled, prepareRolloutContext } from "./lib/execution"
-import { resolveLedgerSigner } from "./lib/ledger"
 import { readOwnableOwner, readProxyAdmin, readProxyImplementation, requireCode, runtimeCodeHash } from "./lib/onchain"
+import { resolveConfiguredSigner } from "./lib/signer"
 import { saveRolloutState } from "./lib/state"
 
 async function verifyManager(proxy: string, loaded: ReturnType<typeof loadRolloutConfig>) {
@@ -110,11 +110,10 @@ async function main() {
 		return
 	}
 
-	const deployer = await resolveLedgerSigner({
+	const deployer = await resolveConfiguredSigner({
 		role: "deployer",
-		expectedAddress: config.signers.deployer.address,
+		config: config.signers.deployer,
 		provider,
-		scan: config.ledger.scan,
 		state,
 		stateFile: loaded.stateFile,
 	})

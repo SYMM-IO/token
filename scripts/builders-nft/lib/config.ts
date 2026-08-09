@@ -3,10 +3,10 @@ import path from "node:path"
 
 import { ethers } from "ethers"
 
-export type LedgerScanConfig = {
-	accountCount: number
-	addressCount: number
-	extraPaths: string[]
+export type PrivateKeyEnvSignerConfig = {
+	type: "privateKeyEnv"
+	address: string
+	privateKeyEnv: string
 }
 
 export type BuildersNftRolloutConfig = {
@@ -29,15 +29,8 @@ export type BuildersNftRolloutConfig = {
 		expectedSymmAdmin: string
 	}
 	signers: {
-		deployer: {
-			address: string
-		}
-		nftProxyAdminOwner: {
-			address: string
-		}
-	}
-	ledger: {
-		scan: LedgerScanConfig
+		deployer: PrivateKeyEnvSignerConfig
+		nftProxyAdminOwner: PrivateKeyEnvSignerConfig
 	}
 	upgrade: {
 		acceptedRemovedFunctions: string[]
@@ -78,6 +71,20 @@ function requireCount(value: unknown, label: string): number {
 	return Number(value)
 }
 
+function requirePrivateKeyEnvSigner(value: unknown, label: string): PrivateKeyEnvSignerConfig {
+	if (!value || typeof value !== "object") throw new Error(`${label} is required`)
+	const signer = value as Partial<PrivateKeyEnvSignerConfig>
+	if (signer.type !== "privateKeyEnv") throw new Error(`${label}.type must be privateKeyEnv`)
+	if (typeof signer.privateKeyEnv !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(signer.privateKeyEnv)) {
+		throw new Error(`${label}.privateKeyEnv must be an uppercase environment-variable name`)
+	}
+	return {
+		type: "privateKeyEnv",
+		address: requireAddress(signer.address, `${label}.address`),
+		privateKeyEnv: signer.privateKeyEnv,
+	}
+}
+
 function requireRelativeFile(configFile: string, value: unknown, label: string): string {
 	if (typeof value !== "string" || value.trim() === "") throw new Error(`${label} must be a non-empty path`)
 	return path.resolve(path.dirname(configFile), value)
@@ -91,7 +98,7 @@ export function loadRolloutConfig(configFileOverride?: string): LoadedRolloutCon
 	if (!fs.existsSync(configFile)) throw new Error(`Rollout config does not exist: ${configFile}`)
 	const config = JSON.parse(fs.readFileSync(configFile, "utf8")) as BuildersNftRolloutConfig
 
-	if (config.schemaVersion !== 1) throw new Error(`Unsupported rollout config schemaVersion: ${config.schemaVersion}`)
+	if (config.schemaVersion !== 2) throw new Error(`Unsupported rollout config schemaVersion: ${config.schemaVersion}`)
 	if (!config.network?.name) throw new Error("network.name is required")
 	if (!Number.isInteger(config.network.chainId) || config.network.chainId <= 0) throw new Error("network.chainId must be a positive integer")
 
@@ -110,17 +117,12 @@ export function loadRolloutConfig(configFileOverride?: string): LoadedRolloutCon
 		"contracts.expectedBuildersNftProxyAdminOwner",
 	)
 	config.contracts.expectedSymmAdmin = requireAddress(config.contracts?.expectedSymmAdmin, "contracts.expectedSymmAdmin")
-	config.signers.deployer.address = requireAddress(config.signers?.deployer?.address, "signers.deployer.address")
-	config.signers.nftProxyAdminOwner.address = requireAddress(config.signers?.nftProxyAdminOwner?.address, "signers.nftProxyAdminOwner.address")
+	config.signers.deployer = requirePrivateKeyEnvSigner(config.signers?.deployer, "signers.deployer")
+	config.signers.nftProxyAdminOwner = requirePrivateKeyEnvSigner(config.signers?.nftProxyAdminOwner, "signers.nftProxyAdminOwner")
 	if (config.signers.nftProxyAdminOwner.address !== config.contracts.expectedBuildersNftProxyAdminOwner) {
 		throw new Error("signers.nftProxyAdminOwner.address must match contracts.expectedBuildersNftProxyAdminOwner")
 	}
 
-	config.ledger.scan.accountCount = requireCount(config.ledger?.scan?.accountCount, "ledger.scan.accountCount")
-	config.ledger.scan.addressCount = requireCount(config.ledger?.scan?.addressCount, "ledger.scan.addressCount")
-	if (!Array.isArray(config.ledger.scan.extraPaths) || config.ledger.scan.extraPaths.some(item => typeof item !== "string")) {
-		throw new Error("ledger.scan.extraPaths must be an array of derivation paths")
-	}
 	if (!Array.isArray(config.upgrade?.acceptedRemovedFunctions)) throw new Error("upgrade.acceptedRemovedFunctions must be an array")
 	if (!ethers.isHexString(config.roles?.timelockPredecessor, 32)) throw new Error("roles.timelockPredecessor must be bytes32")
 	if (!config.roles.timelockSaltLabel) throw new Error("roles.timelockSaltLabel is required")

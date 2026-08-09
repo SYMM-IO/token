@@ -1,5 +1,5 @@
 {
-	"schemaVersion": 1,
+	"schemaVersion": 2,
 	"network": {
 		"name": "base",
 		"chainId": 8453
@@ -19,17 +19,14 @@
 	},
 	"signers": {
 		"deployer": {
-			"address": "0x00c2796b3AD3369D604E009D75204D7a15Cc584b"
+			"type": "privateKeyEnv",
+			"address": "0x00c2796b3AD3369D604E009D75204D7a15Cc584b",
+			"privateKeyEnv": "BUILDERS_NFT_DEPLOYER_PRIVATE_KEY"
 		},
 		"nftProxyAdminOwner": {
-			"address": "0xf12239317e985f6772f86407608b166efa3e2f05"
-		}
-	},
-	"ledger": {
-		"scan": {
-			"accountCount": 10,
-			"addressCount": 20,
-			"extraPaths": []
+			"type": "privateKeyEnv",
+			"address": "0xf12239317e985f6772f86407608b166efa3e2f05",
+			"privateKeyEnv": "BUILDERS_NFT_NFT_ADMIN_PRIVATE_KEY"
 		}
 	},
 	"upgrade": {

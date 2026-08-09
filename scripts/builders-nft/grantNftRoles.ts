@@ -3,8 +3,8 @@ import hre from "hardhat"
 
 import { loadRolloutConfig } from "./lib/config"
 import { executionEnabled, prepareRolloutContext } from "./lib/execution"
-import { resolveLedgerSigner } from "./lib/ledger"
 import { loadRoleTransactions } from "./lib/roleTransactions"
+import { resolveConfiguredSigner } from "./lib/signer"
 import { saveRolloutState } from "./lib/state"
 
 const accessControlAbi = ["function grantRole(bytes32 role,address account)", "function hasRole(bytes32 role,address account) view returns (bool)"]
@@ -25,11 +25,10 @@ async function main() {
 		console.log(`Preview only. Set EXECUTE=true and CONFIRM_CHAIN_ID=${config.network.chainId} to grant the NFT roles.`)
 		return
 	}
-	const signer = await resolveLedgerSigner({
+	const signer = await resolveConfiguredSigner({
 		role: "nftProxyAdminOwner",
-		expectedAddress: plan.nftAdmin.address,
+		config: config.signers.nftProxyAdminOwner,
 		provider: hre.ethers.provider,
-		scan: config.ledger.scan,
 		state,
 		stateFile: loaded.stateFile,
 	})
