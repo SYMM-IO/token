@@ -1,5 +1,5 @@
 import { task } from "hardhat/config"
-import { HardhatRuntimeEnvironment } from "hardhat/types"
+import type { HardhatRuntimeEnvironment } from "hardhat/types"
 
 task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager contract")
 	.addParam("symm", "SYMM token address")
@@ -10,21 +10,11 @@ task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager co
 	.addParam("vestingduration", "Linear vesting duration, in seconds")
 	.addParam("penaltyrate", "Early-claim penalty scaled by 1e18")
 	.addParam("penaltyreceiver", "Address receiving early-claim penalties")
-	.addParam("maxactiveunlockrequests", "Maximum active unlock requests allowed per user")
+	.addParam("maxactiveunlockrequests", "Maximum pending unlock requests and active vesting flows allowed per user")
 	.addFlag("grantroles", "Grant the deployed manager its required SYMM and NFT roles from the deployer")
 	.setAction(async (args, { ethers, upgrades }: HardhatRuntimeEnvironment) => {
-		const {
-			symm,
-			nft,
-			admin,
-			minlockamount,
-			cliffduration,
-			vestingduration,
-			penaltyrate,
-			penaltyreceiver,
-			maxactiveunlockrequests,
-			grantroles,
-		} = args
+		const { symm, nft, admin, minlockamount, cliffduration, vestingduration, penaltyrate, penaltyreceiver, maxactiveunlockrequests, grantroles } =
+			args
 		const addresses = { symm, nft, admin, penaltyreceiver }
 		for (const [label, value] of Object.entries(addresses)) {
 			if (!ethers.isAddress(value) || value === ethers.ZeroAddress) throw new Error(`Invalid ${label} address`)
@@ -58,17 +48,7 @@ task("deploy:SymmioBuildersNftManager", "Deploys the SymmioBuildersNftManager co
 		const factory = await ethers.getContractFactory("SymmioBuildersNftManager")
 		const contract = await upgrades.deployProxy(
 			factory,
-			[
-				symm,
-				nft,
-				admin,
-				minLockAmount,
-				cliffDuration,
-				vestingDuration,
-				penaltyRate,
-				penaltyreceiver,
-				maxActiveUnlockRequests,
-			],
+			[symm, nft, admin, minLockAmount, cliffDuration, vestingDuration, penaltyRate, penaltyreceiver, maxActiveUnlockRequests],
 			{ initializer: "initialize" },
 		)
 		await contract.waitForDeployment()

@@ -46,6 +46,8 @@ While an unlock is pending:
 
 Cancellation remains available until vesting starts, even if the cliff has already ended. A user can also create multiple unlock requests against one NFT when enough available balance remains; each request is tracked separately.
 
+The deployment-level per-user cap counts both pending unlock requests and active vesting flows. Starting vesting does not release the cap slot; the slot is released only when the request is cancelled before vesting or the vesting flow is fully settled.
+
 ### 4. Start Vesting and Claim
 
 After the cliff, the user explicitly starts linear vesting. The selected amount leaves the NFT balance and becomes a separate vesting flow.

@@ -705,6 +705,8 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		uint256 flowId,
 		uint256 amount
 	) internal returns (uint256 unlockedClaimed, uint256 lockedClaimed, uint256 penalty) {
+		if (amount == 0) revert ZeroAmount();
+
 		// Claim any unlocked tokens first
 		bool flowDeleted;
 		(flowDeleted, unlockedClaimed) = _claimUnlockedToken(user, flowId);
@@ -771,7 +773,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	}
 
 	/**
-	 * @notice Update the maximum number of active unlock requests allowed per user.
+	 * @notice Update the maximum number of pending unlock requests and active vesting flows allowed per user.
 	 * @param _maxUserActiveUnlockRequests New per-user maximum.
 	 * @dev Counts both requests waiting in the cliff and requests with an active
 	 *      vesting flow. Lowering the maximum does not affect existing requests,

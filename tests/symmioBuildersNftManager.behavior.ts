@@ -1,10 +1,10 @@
-import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
+import type { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers"
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers"
 import { expect } from "chai"
 import { ethers } from "hardhat"
 
-import { Symmio, SymmioBuildersNft, SymmioBuildersNftManager } from "../typechain-types"
-import { initializeFixture, RunContext } from "./Initialize.fixture"
+import type { Symmio, SymmioBuildersNft, SymmioBuildersNftManager } from "../typechain-types"
+import { initializeFixture, type RunContext } from "./Initialize.fixture"
 
 export function shouldBehaveLikeSymmioBuildersNftManager() {
 	let context: RunContext
@@ -353,6 +353,20 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(request.netClaimedAmount + receiverDelta).to.equal(vestedDelta)
 		})
 
+		it("rejects zero-value locked claims without advancing rounded-down flows", async () => {
+			await manager.connect(admin).setMinLockAmount(1)
+			const flowId = await createFlow(user1, 0n, 0n, 1n)
+			const [, flowsBefore] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(await manager.getClaimableAmountForFlow(flowId)).to.equal(0)
+
+			await expect(manager.connect(user1).claimLockedToken(flowId, 0)).to.be.revertedWithCustomError(manager, "ZeroAmount")
+
+			const [, flowsAfter] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(flowsAfter[0].startTime).to.equal(flowsBefore[0].startTime)
+			expect(flowsAfter[0].amount).to.equal(flowsBefore[0].amount)
+			expect(await manager.totalVested()).to.equal(1)
+		})
+
 		it("allows an early claim when elapsed vesting rounds down to zero", async () => {
 			await manager.connect(admin).setMinLockAmount(1)
 			const flowId = await createFlow(user1, 0n, 0n, 1n)
@@ -365,9 +379,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(await manager.getClaimableAmountForFlow(flowId)).to.equal(0)
 
 			const userBefore = await symm.balanceOf(user1.address)
-			await expect(manager.connect(user1).claimLockedToken(flowId, 1))
-				.to.emit(manager, "LockedTokenClaimed")
-				.withArgs(user1.address, flowId, 1, 0)
+			await expect(manager.connect(user1).claimLockedToken(flowId, 1)).to.emit(manager, "LockedTokenClaimed").withArgs(user1.address, flowId, 1, 0)
 
 			expect((await symm.balanceOf(user1.address)) - userBefore).to.equal(1)
 			expect(await manager.totalVested()).to.equal(0)
@@ -443,9 +455,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await expect(manager.connect(user1).setMinLockAmount(1))
 				.to.be.revertedWithCustomError(manager, "AccessControlUnauthorizedAccount")
 				.withArgs(user1.address, await manager.SETTER_ROLE())
-			await expect(manager.connect(admin).setMaxUserActiveUnlockRequests(5))
-				.to.emit(manager, "MaxUserActiveUnlockRequestsUpdated")
-				.withArgs(5)
+			await expect(manager.connect(admin).setMaxUserActiveUnlockRequests(5)).to.emit(manager, "MaxUserActiveUnlockRequestsUpdated").withArgs(5)
 		})
 	})
 }
