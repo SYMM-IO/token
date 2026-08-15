@@ -112,6 +112,7 @@ export async function initializeFixture(): Promise<RunContext> {
 		vestingduration: "3600",
 		penaltyrate: ethers.parseUnits("0.2", 18).toString(),
 		penaltyreceiver: await context.signers.vestingPenaltyReceiver.getAddress(),
+		maxactiveunlockrequests: "10",
 		grantroles: true,
 	})
 

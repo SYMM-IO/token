@@ -21,6 +21,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 	const cliffDuration = 10n
 	const vestingDuration = 3600n
 	const penaltyRate = ethers.parseUnits("0.2", 18)
+	const maxUserActiveUnlockRequests = 10n
 	const brand = "Builder"
 
 	beforeEach(async () => {
@@ -53,6 +54,7 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(await manager.vestingDuration()).to.equal(vestingDuration)
 			expect(await manager.lockedClaimPenaltyRate()).to.equal(penaltyRate)
 			expect(await manager.lockedClaimPenaltyReceiver()).to.equal(penaltyReceiver.address)
+			expect(await manager.maxUserActiveUnlockRequests()).to.equal(maxUserActiveUnlockRequests)
 		})
 
 		it("grants the manager every required token and NFT role", async () => {
@@ -117,6 +119,49 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 	})
 
 	describe("unlock lifecycle", () => {
+		it("enforces the per-user active unlock request limit and releases a slot on cancellation", async () => {
+			const maximum = 2n
+			await manager.connect(admin).setMaxUserActiveUnlockRequests(maximum)
+			await manager.connect(admin).mintWithoutBurn(user1.address, minLockAmount * 3n, brand)
+
+			await manager.connect(user1).initiateUnlock(0, minLockAmount)
+			await manager.connect(user1).initiateUnlock(0, minLockAmount)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(maximum)
+
+			await expect(manager.connect(user1).initiateUnlock(0, minLockAmount))
+				.to.be.revertedWithCustomError(manager, "MaxUserActiveUnlockRequestsReached")
+				.withArgs(user1.address, maximum)
+
+			await manager.connect(user1).cancelUnlock(0)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(1)
+
+			await manager.connect(user1).initiateUnlock(0, minLockAmount)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(maximum)
+		})
+
+		it("keeps a request active during vesting and releases its slot after full settlement", async () => {
+			await manager.connect(admin).setMaxUserActiveUnlockRequests(1)
+			await manager.connect(admin).mintWithoutBurn(user1.address, minLockAmount, "First")
+			await manager.connect(admin).mintWithoutBurn(user1.address, minLockAmount, "Second")
+
+			await manager.connect(user1).initiateUnlock(0, minLockAmount)
+			await time.increase(Number(cliffDuration) + 1)
+			await manager.connect(user1).completeCliffAndStartVesting(0)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(1)
+			await expect(manager.connect(user1).initiateUnlock(1, minLockAmount)).to.be.revertedWithCustomError(
+				manager,
+				"MaxUserActiveUnlockRequestsReached",
+			)
+
+			const request = await manager.unlockRequests(0)
+			await time.increaseTo(Number(request.vestingEndTime + 1n))
+			await manager.connect(user1).claimUnlockedToken(request.vestingFlowId)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(0)
+
+			await manager.connect(user1).initiateUnlock(1, minLockAmount)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(1)
+		})
+
 		it("creates and cancels an unlock request while preserving accounting", async () => {
 			await manager.connect(admin).mintWithoutBurn(user1.address, minLockAmount, brand)
 			const unlockAmount = ethers.parseEther("40")
@@ -307,6 +352,15 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(request.netClaimedAmount).to.equal(userDelta)
 			expect(request.netClaimedAmount + receiverDelta).to.equal(vestedDelta)
 		})
+
+		it("releases the active request slot after claiming the entire unvested balance", async () => {
+			await manager.connect(admin).setMaxUserActiveUnlockRequests(1)
+			const flowId = await createFlow(user1, 0n, 0n, minLockAmount)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(1)
+
+			await manager.connect(user1).claimLockedToken(flowId, minLockAmount)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(0)
+		})
 	})
 
 	describe("system pause", () => {
@@ -344,9 +398,13 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			await expect(manager.connect(admin).setMinLockAmount(0)).to.be.revertedWithCustomError(manager, "ZeroAmount")
 			await expect(manager.connect(admin).setCliffDuration(0)).to.be.revertedWithCustomError(manager, "InvalidDuration")
 			await expect(manager.connect(admin).setVestingDuration(0)).to.be.revertedWithCustomError(manager, "InvalidDuration")
+			await expect(manager.connect(admin).setMaxUserActiveUnlockRequests(0)).to.be.revertedWithCustomError(manager, "ZeroAmount")
 			await expect(manager.connect(user1).setMinLockAmount(1))
 				.to.be.revertedWithCustomError(manager, "AccessControlUnauthorizedAccount")
 				.withArgs(user1.address, await manager.SETTER_ROLE())
+			await expect(manager.connect(admin).setMaxUserActiveUnlockRequests(5))
+				.to.emit(manager, "MaxUserActiveUnlockRequestsUpdated")
+				.withArgs(5)
 		})
 	})
 }

@@ -112,6 +112,12 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	/// @notice Active vesting flow IDs keyed by beneficiary.
 	mapping(address => uint256[]) private _userFlowIds;
 
+	/// @notice Maximum number of pending unlock requests and active vesting flows allowed per user.
+	uint256 public maxUserActiveUnlockRequests;
+
+	/// @notice Number of pending unlock requests and active vesting flows keyed by user.
+	mapping(address => uint256) public userActiveUnlockRequestCount;
+
 	/* ─────────────────────────────── Structs ─────────────────────────────── */
 
 	/**
@@ -259,6 +265,12 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	event VestingDurationUpdated(uint256 newDuration);
 
 	/**
+	 * @notice Emitted when the per-user active unlock request limit is updated.
+	 * @param newMaximum New maximum number of active unlock requests per user.
+	 */
+	event MaxUserActiveUnlockRequestsUpdated(uint256 newMaximum);
+
+	/**
 	 * @notice Emitted when unlocked tokens are claimed from a vesting flow.
 	 * @param user   Address of the user claiming the tokens.
 	 * @param flowId ID of the vesting flow.
@@ -291,6 +303,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	error InvalidDuration();
 	error InvalidPenalty(uint256 penalty);
 	error NotOwner();
+	error MaxUserActiveUnlockRequestsReached(address user, uint256 maximum);
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -310,6 +323,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 * @param _vestingDuration              Duration of the vesting period in seconds.
 	 * @param _lockedClaimPenaltyRate       Penalty rate for early claims (scaled by 1e18).
 	 * @param _lockedClaimPenaltyReceiver   Address to receive penalties from early claims.
+	 * @param _maxUserActiveUnlockRequests  Maximum pending unlock requests and active vesting flows allowed per user.
 	 */
 	function initialize(
 		address _symm,
@@ -319,7 +333,8 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		uint256 _cliffDuration,
 		uint256 _vestingDuration,
 		uint256 _lockedClaimPenaltyRate,
-		address _lockedClaimPenaltyReceiver
+		address _lockedClaimPenaltyReceiver,
+		uint256 _maxUserActiveUnlockRequests
 	) public initializer {
 		__AccessControlEnumerable_init();
 		__Pausable_init();
@@ -329,6 +344,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 			revert ZeroAddress();
 		if (_cliffDuration == 0 || _vestingDuration == 0) revert InvalidDuration();
 		if (_lockedClaimPenaltyRate > 1e18) revert InvalidPenalty(_lockedClaimPenaltyRate);
+		if (_maxUserActiveUnlockRequests == 0) revert ZeroAmount();
 
 		// Set contract-specific state
 		SYMM = IERC20Extended(_symm);
@@ -338,6 +354,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		vestingDuration = _vestingDuration;
 		lockedClaimPenaltyRate = _lockedClaimPenaltyRate;
 		lockedClaimPenaltyReceiver = _lockedClaimPenaltyReceiver;
+		maxUserActiveUnlockRequests = _maxUserActiveUnlockRequests;
 
 		// Grant all roles to the admin
 		_grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -470,6 +487,9 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	function initiateUnlock(uint256 tokenId, uint256 amount) external nonReentrant whenNotPaused {
 		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 		if (amount == 0) revert ZeroAmount();
+		uint256 activeRequestCount = userActiveUnlockRequestCount[msg.sender];
+		if (activeRequestCount >= maxUserActiveUnlockRequests)
+			revert MaxUserActiveUnlockRequestsReached(msg.sender, maxUserActiveUnlockRequests);
 
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
 		uint256 availableAmount = data.amount - data.unlockingAmount;
@@ -493,6 +513,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		});
 
 		tokenUnlockIds[tokenId].push(unlockId);
+		userActiveUnlockRequestCount[msg.sender] = activeRequestCount + 1;
 
 		emit UnlockInitiated(unlockId, tokenId, msg.sender, amount, block.timestamp + cliffDuration);
 	}
@@ -517,6 +538,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 
 		// Clean up unlock request
 		delete unlockRequests[unlockId];
+		userActiveUnlockRequestCount[owner] -= 1;
 
 		// Remove unlock ID from token's unlock list
 		uint256[] storage unlockIds = tokenUnlockIds[tokenId];
@@ -743,6 +765,19 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		emit VestingDurationUpdated(_vestingDuration);
 	}
 
+	/**
+	 * @notice Update the maximum number of active unlock requests allowed per user.
+	 * @param _maxUserActiveUnlockRequests New per-user maximum.
+	 * @dev Counts both requests waiting in the cliff and requests with an active
+	 *      vesting flow. Lowering the maximum does not affect existing requests,
+	 *      but prevents new requests until the user's count is below the new limit.
+	 */
+	function setMaxUserActiveUnlockRequests(uint256 _maxUserActiveUnlockRequests) external onlyRole(SETTER_ROLE) {
+		if (_maxUserActiveUnlockRequests == 0) revert ZeroAmount();
+		maxUserActiveUnlockRequests = _maxUserActiveUnlockRequests;
+		emit MaxUserActiveUnlockRequestsUpdated(_maxUserActiveUnlockRequests);
+	}
+
 	/* ────────────────────────── View Functions ────────────────────────── */
 
 	/**
@@ -951,8 +986,9 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	}
 
 	/**
-	 * @dev Removes `flowId` from `user`'s active-flow list using swap-and-pop.
-	 *      Does nothing when the flow ID is absent.
+	 * @dev Removes `flowId` from `user`'s active-flow list using swap-and-pop and
+	 *      releases the corresponding active unlock request slot. Does nothing
+	 *      when the flow ID is absent.
 	 * @param user Beneficiary whose flow list is updated.
 	 * @param flowId Flow ID to remove.
 	 */
@@ -964,6 +1000,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 			if (flowIds[i] == flowId) {
 				flowIds[i] = flowIds[length - 1];
 				flowIds.pop();
+				userActiveUnlockRequestCount[user] -= 1;
 				return;
 			}
 		}
