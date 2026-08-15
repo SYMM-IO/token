@@ -353,6 +353,47 @@ export function shouldBehaveLikeSymmioBuildersNftManager() {
 			expect(request.netClaimedAmount + receiverDelta).to.equal(vestedDelta)
 		})
 
+		it("allows an early claim when elapsed vesting rounds down to zero", async () => {
+			await manager.connect(admin).setMinLockAmount(1)
+			const flowId = await createFlow(user1, 0n, 0n, 1n)
+			const [, flowsBefore] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(await manager.getClaimableAmountForFlow(flowId)).to.equal(0)
+
+			await manager.connect(user1).claimUnlockedToken(flowId)
+			const [, flowsAfter] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(flowsAfter[0].startTime).to.equal(flowsBefore[0].startTime)
+			expect(await manager.getClaimableAmountForFlow(flowId)).to.equal(0)
+
+			const userBefore = await symm.balanceOf(user1.address)
+			await expect(manager.connect(user1).claimLockedToken(flowId, 1))
+				.to.emit(manager, "LockedTokenClaimed")
+				.withArgs(user1.address, flowId, 1, 0)
+
+			expect((await symm.balanceOf(user1.address)) - userBefore).to.equal(1)
+			expect(await manager.totalVested()).to.equal(0)
+			expect(await manager.getUserFlowCount(user1.address)).to.equal(0)
+			expect(await manager.userActiveUnlockRequestCount(user1.address)).to.equal(0)
+		})
+
+		it("allows an early claim when a reset flow segment rounds down to zero", async () => {
+			await manager.connect(admin).setMinLockAmount(1)
+			const flowId = await createFlow(user1, 0n, 0n, 2n)
+			const request = await manager.unlockRequests(0)
+			const midpoint = (request.vestingStartTime + request.vestingEndTime) / 2n
+
+			await time.increaseTo(Number(midpoint))
+			await manager.connect(user1).claimUnlockedToken(flowId)
+			let [, flows] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(flows[0].amount).to.equal(1)
+
+			await time.increase(1)
+			expect(await manager.getClaimableAmountForFlow(flowId)).to.equal(0)
+			await expect(manager.connect(user1).claimLockedToken(flowId, 1)).to.not.be.reverted
+			;[, flows] = await manager.getUserFlows(user1.address, 0, 1)
+			expect(flows).to.have.length(0)
+			expect(await manager.totalVested()).to.equal(0)
+		})
+
 		it("releases the active request slot after claiming the entire unvested balance", async () => {
 			await manager.connect(admin).setMaxUserActiveUnlockRequests(1)
 			const flowId = await createFlow(user1, 0n, 0n, minLockAmount)

@@ -711,6 +711,11 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		if (!flowDeleted) {
 			Flow storage flow = _flows[flowId];
 			uint256 reqId = flow.reqId;
+			// If `endTime` had been reached, `_claimUnlockedToken` would have claimed
+			// the full amount and deleted the flow at this same timestamp. Therefore,
+			// `shrink` cannot delete here; it only advances elapsed time whose vested
+			// amount rounded to zero so locked principal can be decreased safely.
+			if (flow.startTime < block.timestamp) flow.shrink();
 			amount = Math.min(amount, flow.amount);
 			flowDeleted = flow.decreaseLockedAmount(amount);
 			if (flowDeleted) _removeUserFlowId(user, flowId);
