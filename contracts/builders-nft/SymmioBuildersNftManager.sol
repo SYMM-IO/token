@@ -488,8 +488,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
 		if (amount == 0) revert ZeroAmount();
 		uint256 activeRequestCount = userActiveUnlockRequestCount[msg.sender];
-		if (activeRequestCount >= maxUserActiveUnlockRequests)
-			revert MaxUserActiveUnlockRequestsReached(msg.sender, maxUserActiveUnlockRequests);
+		if (activeRequestCount >= maxUserActiveUnlockRequests) revert MaxUserActiveUnlockRequestsReached(msg.sender, maxUserActiveUnlockRequests);
 
 		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
 		uint256 availableAmount = data.amount - data.unlockingAmount;
