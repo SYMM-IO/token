@@ -104,4 +104,32 @@ forkSuite("NFTManager pledges — pinned Base upgrade", function () {
 		expect(await nft.getLockData(config.tokenId)).to.deep.equal(before)
 		expect((await manager.nftPledges(config.tokenId)).settlementRecipient).to.equal(config.controller)
 	})
+
+	for (const settlement of ["releasePledgedNft", "seizePledgedNft"] as const) {
+		it(`partially seizes into a new actual Builder NFT, then settles the remainder with ${settlement}`, async () => {
+			const { manager, nft, safe, carbon, managerAddress } = await loadFixture(depositFixture)
+			const original = await nft.getLockData(config.tokenId)
+			const amount = ethers.parseEther("1000000")
+			const symm = await ethers.getContractAt("IERC20", await manager.SYMM())
+			const supply = await symm.totalSupply()
+			await expect(manager.connect(carbon).partiallySeizePledgedNft(config.tokenId, amount)).to.be.revertedWithCustomError(
+				manager,
+				"UnauthorizedPledgeController",
+			)
+			const seizedId = await manager.connect(safe).partiallySeizePledgedNft.staticCall(config.tokenId, amount)
+			await expect(manager.connect(safe).partiallySeizePledgedNft(config.tokenId, amount))
+				.to.emit(manager, "PledgedNftPartiallySeized")
+				.withArgs(config.tokenId, seizedId, config.controller, amount, original.amount - amount)
+			expect(await nft.ownerOf(seizedId)).to.equal(config.controller)
+			expect(await nft.ownerOf(config.tokenId)).to.equal(managerAddress)
+			expect((await nft.getLockData(config.tokenId)).amount + (await nft.getLockData(seizedId)).amount).to.equal(original.amount)
+			expect((await nft.getLockData(config.tokenId)).lockTimestamp).to.equal(original.lockTimestamp)
+			expect(await manager.partiallySeizedCollateral(config.tokenId)).to.equal(amount)
+			expect((await manager.nftPledges(config.tokenId)).status).to.equal(1)
+			expect(await symm.totalSupply()).to.equal(supply)
+			await manager.connect(safe)[settlement](config.tokenId)
+			expect(await nft.ownerOf(config.tokenId)).to.equal(settlement === "releasePledgedNft" ? config.beneficiary : config.controller)
+			expect((await nft.getLockData(config.tokenId)).amount).to.equal(original.amount - amount)
+		})
+	}
 })

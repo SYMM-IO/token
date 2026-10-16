@@ -1,10 +1,10 @@
 import { expect } from "chai"
 import { ethers, run, network } from "hardhat"
-import { mkdtempSync, readFileSync, rmSync } from "fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers"
-import { pledgeTransactions, readPledgeConfiguration } from "../tasks/builderNftPledge"
+import { partialSeizureTransaction, pledgeTransactions, readPledgeConfiguration } from "../tasks/builderNftPledge"
 import { initializeFixture } from "./Initialize.fixture"
 
 describe("NFTManager pledge preparation", () => {
@@ -59,8 +59,40 @@ describe("NFTManager pledge preparation", () => {
 			controller: safe.address,
 			tokenId: "0",
 		}
-		return { manager, nft, carbon, safe, transactions: pledgeTransactions(config, manager.interface) }
+		return { manager, nft, carbon, safe, config, transactions: pledgeTransactions(config, manager.interface) }
 	}
+	it("requires an explicit positive partial seizure amount", async () => {
+		const { manager, config } = await loadFixture(fixture)
+		for (const amount of ["0", "-1", "1.5", "", "1e18"])
+			expect(() => partialSeizureTransaction(config, manager.interface, amount)).to.throw("positive integer")
+	})
+	it("prepares an unsigned partial seizure and executes its calldata locally", async () => {
+		const { manager, nft, carbon, safe, config, transactions } = await loadFixture(fixture)
+		const amount = ethers.parseEther("1000000")
+		const directory = mkdtempSync(join(tmpdir(), "nft-partial-seizure-"))
+		try {
+			const [signer] = await ethers.getSigners()
+			const before = await signer.getNonce()
+			const output = join(directory, "partial.safe.json")
+			const configfile = join(directory, "configuration.json")
+			writeFileSync(configfile, JSON.stringify(config))
+			const batch = await run("pledge:prepare-partial-seizure", { amount: String(amount), output, configfile })
+			expect(await signer.getNonce()).to.equal(before)
+			expect(JSON.parse(readFileSync(output, "utf8"))).to.deep.equal(batch)
+			expect(batch.transactions).to.have.length(1)
+			expect(manager.interface.decodeFunctionData("partiallySeizePledgedNft", batch.transactions[0].data)).to.deep.equal([0n, amount])
+			for (const transaction of [transactions.approve, transactions.pledge])
+				await carbon.sendTransaction({ to: transaction.to, data: transaction.data })
+			const transaction = batch.transactions[0]
+			await safe.sendTransaction({ to: transaction.to, data: transaction.data })
+			expect(await nft.ownerOf(1)).to.equal(safe.address)
+			expect((await nft.getLockData(1)).amount).to.equal(amount)
+			expect((await nft.getLockData(0)).amount).to.equal(ethers.parseEther("7800000"))
+			expect(await nft.ownerOf(0)).to.equal(await manager.getAddress())
+		} finally {
+			rmSync(directory, { recursive: true, force: true })
+		}
+	})
 	for (const action of ["release", "seize"] as const) {
 		it(`executes the generated approval, pledge and ${action} calldata locally`, async () => {
 			const { manager, nft, carbon, safe, transactions } = await loadFixture(fixture)

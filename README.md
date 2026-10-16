@@ -5,7 +5,8 @@
 ## Builder NFT pledges
 
 `SymmioBuildersNftManager` supports user-initiated NFT pledges without prior SYMMIO approval through
-`lockNftAsPledgeForSymmio`, with Safe-only whole-NFT return or seizure and no pledge time restrictions.
+`lockNftAsPledgeForSymmio`, with Safe-only return, whole-NFT or partial seizure, and no pledge time restrictions.
+Partial seizure creates a new NFT for the Safe while the original NFT keeps the remaining pledged collateral.
 See the [pledge runbook](contracts/builders-nft/PLEDGES.md) for authority, upgrade preparation,
 calldata, tests and recovery rules. No deployment or manager upgrade has been performed by this change.
 

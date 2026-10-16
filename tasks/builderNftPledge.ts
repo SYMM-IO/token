@@ -42,6 +42,44 @@ export function pledgeTransactions(config: PledgeConfiguration, manager: Interfa
 	}
 }
 
+export function partialSeizureTransaction(config: PledgeConfiguration, manager: Interface, amount: string) {
+	if (!/^\d+$/.test(amount) || BigInt(amount) === 0n) throw new Error("Partial seizure amount must be a positive integer in SYMM base units")
+	return {
+		chainId: config.chainId,
+		from: config.controller,
+		to: config.manager,
+		value: "0",
+		data: manager.encodeFunctionData("partiallySeizePledgedNft", [config.tokenId, amount]),
+	}
+}
+
+task("pledge:prepare-partial-seizure", "Prepare one unsigned Safe partial seizure; never broadcasts")
+	.addParam("amount", "Represented SYMM to seize in base units; must be less than the live remainder")
+	.addOptionalParam("configfile", "Public pledge configuration", "configs/carbon-builder-nft-pledge.json")
+	.addOptionalParam("output", "Output Safe transaction file")
+	.setAction(async ({ amount, configfile, output }, hre) => {
+		await hre.run("compile")
+		const config = readPledgeConfiguration(configfile)
+		const factory = await hre.ethers.getContractFactory(PLEDGE_MANAGER)
+		const { to, value, data } = partialSeizureTransaction(config, factory.interface, amount)
+		const batch = {
+			version: "1.0",
+			chainId: String(config.chainId),
+			createdAt: Date.now(),
+			meta: {
+				name: `Builder NFT ${config.tokenId}: partial seizure of ${amount} SYMM base units`,
+				txBuilderVersion: "1.16.5",
+				createdFromSafeAddress: config.controller,
+			},
+			transactions: [{ to, value, data, contractMethod: null, contractInputsValues: null }],
+		}
+		const path = output || `artifacts/pledge/user-initiated/partial-seizure-${config.tokenId}-${amount}.safe.json`
+		mkdirSync(dirname(resolve(path)), { recursive: true })
+		writeFileSync(path, JSON.stringify(batch, null, 2) + "\n")
+		console.log(`Prepared ${path}; verify the live remainder before signing. No transaction broadcast or Safe proposal.`)
+		return batch
+	})
+
 task("pledge:prepare", "Prepare unsigned manager upgrade inputs and pledge calldata; never broadcasts")
 	.addOptionalParam("configfile", "Public pledge configuration", "configs/carbon-builder-nft-pledge.json")
 	.addOptionalParam("output", "Output manifest", "artifacts/pledge/user-initiated/carbon-preparation.json")

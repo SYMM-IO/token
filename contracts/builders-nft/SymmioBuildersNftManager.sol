@@ -49,6 +49,11 @@ interface IERC20Extended is IERC20 {
 	function mint(address to, uint256 amount) external;
 }
 
+/// @dev Read the existing NFT transfer pause without changing its ERC-165 interface identifier.
+interface IBuilderNftTransferPause {
+	function transfersPaused() external view returns (bool);
+}
+
 contract SymmioBuildersNftManager is
 	Initializable,
 	AccessControlEnumerableUpgradeable,
@@ -133,6 +138,8 @@ contract SymmioBuildersNftManager is
 	/// @notice Automatic collateral floor for every user-initiated pledge. No per-NFT approval is needed.
 	uint256 public minimumPledgeCollateral;
 	mapping(uint256 => NftPledge) public nftPledges;
+	/// @notice Cumulative represented SYMM split out through partial seizures. Deposit snapshots stay unchanged.
+	mapping(uint256 => uint256) public partiallySeizedCollateral;
 
 	enum PledgeStatus {
 		None,
@@ -151,6 +158,13 @@ contract SymmioBuildersNftManager is
 	event NftPledged(uint256 indexed tokenId, address indexed beneficiary, uint256 collateralAmount);
 	event PledgedNftReleased(uint256 indexed tokenId, address indexed beneficiary);
 	event PledgedNftSeized(uint256 indexed tokenId, address indexed recipient);
+	event PledgedNftPartiallySeized(
+		uint256 indexed tokenId,
+		uint256 indexed seizedTokenId,
+		address indexed recipient,
+		uint256 amount,
+		uint256 remainingCollateral
+	);
 	event PledgedNftRecovered(uint256 indexed tokenId, address indexed recipient);
 	event UnrelatedPledgeNftRecovered(address indexed token, uint256 indexed tokenId);
 
@@ -161,6 +175,8 @@ contract SymmioBuildersNftManager is
 	error PledgeNotInCustody();
 	error ProtectedPledgeNFT();
 	error PledgesNotInitialized();
+	error InvalidPartialSeizureAmount();
+	error PledgeNftTransfersPaused();
 
 	modifier onlyPledgeController() {
 		if (msg.sender != pledgeController) revert UnauthorizedPledgeController();
@@ -462,6 +478,26 @@ contract SymmioBuildersNftManager is
 	function seizePledgedNft(uint256 tokenId) external onlyPledgeController nonReentrant whenNotPaused {
 		_settleNftPledge(tokenId, PledgeStatus.Seized, pledgeController);
 		emit PledgedNftSeized(tokenId, pledgeController);
+	}
+
+	/// @notice Split part of a pledged NFT's represented SYMM into a new NFT owned by the Safe.
+	/// @dev The original NFT stays Locked with its beneficiary and lock timestamp unchanged.
+	///      The deposit minimum does not apply to either split amount. Use seizePledgedNft for the whole remainder.
+	function partiallySeizePledgedNft(
+		uint256 tokenId,
+		uint256 amount
+	) external onlyPledgeController nonReentrant whenNotPaused returns (uint256 seizedTokenId) {
+		if (nftPledges[tokenId].status != PledgeStatus.Locked) revert InvalidPledgeStatus();
+		if (!isPledgedNftInCustody(tokenId)) revert PledgeNotInCustody();
+		if (IBuilderNftTransferPause(address(nftContract)).transfersPaused()) revert PledgeNftTransfersPaused();
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		if (data.unlockingAmount != 0) revert TokenHasActiveUnlock();
+		if (amount == 0 || amount >= data.amount) revert InvalidPartialSeizureAmount();
+		uint256 remaining = data.amount - amount;
+		partiallySeizedCollateral[tokenId] += amount;
+		nftContract.updateLockData(tokenId, remaining, 0, data.name);
+		seizedTokenId = nftContract.mint(pledgeController, amount, data.name);
+		emit PledgedNftPartiallySeized(tokenId, seizedTokenId, pledgeController, amount, remaining);
 	}
 
 	/// @notice Recover a raw resend only to the previously recorded release/seizure recipient.
