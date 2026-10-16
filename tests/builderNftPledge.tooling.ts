@@ -27,7 +27,11 @@ describe("NFTManager pledge preparation", () => {
 			)
 			const input = JSON.parse(readFileSync(`${output}.solc-input.json`, "utf8"))
 			expect(input.sources["contracts/builders-nft/SymmioBuildersNftManager.sol"]).to.have.property("content")
-			for (const action of ["configure", "release", "seize"] as const) {
+			expect(manifest.transactions).not.to.have.property("configure")
+			expect(manager.interface.decodeFunctionData("initializePledges", manifest.initializationCalldata)[1]).to.equal(
+				BigInt(manifest.configuration.minimumPledgeCollateral),
+			)
+			for (const action of ["release", "seize"] as const) {
 				const batch = JSON.parse(readFileSync(`${output}.${action}.safe.json`, "utf8"))
 				expect(batch.chainId).to.equal("8453")
 				expect(batch.transactions).to.have.length(1)
@@ -45,7 +49,7 @@ describe("NFTManager pledge preparation", () => {
 			symmioBuildersNft: nft,
 			signers: { admin, user1: carbon, user2: safe },
 		} = context
-		await manager.connect(admin).initializePledges(safe.address)
+		await manager.connect(admin).initializePledges(safe.address, ethers.parseEther("8800000"))
 		await manager.mintWithoutBurn(carbon.address, ethers.parseEther("8800000"), "IntentX")
 		const config = {
 			...readPledgeConfiguration("configs/carbon-builder-nft-pledge.json"),
@@ -60,9 +64,8 @@ describe("NFTManager pledge preparation", () => {
 	for (const action of ["release", "seize"] as const) {
 		it(`executes the generated approval, pledge and ${action} calldata locally`, async () => {
 			const { manager, nft, carbon, safe, transactions } = await loadFixture(fixture)
-			const send = (signer: typeof carbon, transaction: typeof transactions.configure) =>
+			const send = (signer: typeof carbon, transaction: typeof transactions.approve) =>
 				signer.sendTransaction({ to: transaction.to, data: transaction.data, value: transaction.value })
-			await send(safe, transactions.configure)
 			await send(carbon, transactions.approve)
 			await send(carbon, transactions.pledge)
 			expect(await nft.ownerOf(0)).to.equal(await manager.getAddress())

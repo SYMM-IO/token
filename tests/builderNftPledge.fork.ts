@@ -59,12 +59,13 @@ forkSuite("NFTManager pledges — pinned Base upgrade", function () {
 		const before = await configuration()
 		const implementation = await (await ethers.getContractFactory("SymmioBuildersNftManager")).deploy()
 		await implementation.waitForDeployment()
-		const initialization = manager.interface.encodeFunctionData("initializePledges", [config.controller])
+		const initialization = manager.interface.encodeFunctionData("initializePledges", [config.controller, config.minimumPledgeCollateral])
 		await expect(proxyAdmin.connect(carbon).upgradeAndCall(managerAddress, await implementation.getAddress(), initialization)).to.be.reverted
 		await expect(proxyAdmin.connect(safe).upgradeAndCall(managerAddress, await implementation.getAddress(), initialization)).to.be.reverted
 		await proxyAdmin.connect(upgrader).upgradeAndCall(managerAddress, await implementation.getAddress(), initialization)
 		expect(await configuration()).to.deep.equal(before)
 		expect(await manager.pledgeController()).to.equal(config.controller)
+		expect(await manager.minimumPledgeCollateral()).to.equal(BigInt(config.minimumPledgeCollateral))
 		expect(await manager.version()).to.equal("1.1.0")
 		const artifact = await artifacts.readArtifact("SymmioBuildersNftManager")
 		expect(await ethers.provider.getCode(await upgrades.erc1967.getImplementationAddress(managerAddress))).to.equal(artifact.deployedBytecode)
@@ -73,7 +74,6 @@ forkSuite("NFTManager pledges — pinned Base upgrade", function () {
 
 	async function depositFixture() {
 		const f = await loadFixture(fixture)
-		await f.manager.connect(f.safe).configureNftPledge(config.tokenId, config.beneficiary, config.minimumCollateral)
 		await f.nft.connect(f.carbon).approve(f.managerAddress, config.tokenId)
 		await f.manager.connect(f.carbon).lockNftAsPledgeForSymmio(config.tokenId)
 		return f
@@ -81,14 +81,14 @@ forkSuite("NFTManager pledges — pinned Base upgrade", function () {
 
 	it("upgrades the actual manager atomically through its existing upgrade owner without changing V1 state", async () => {
 		const { manager, carbon } = await loadFixture(fixture)
-		await expect(manager.connect(carbon).initializePledges(config.beneficiary)).to.be.revertedWithCustomError(manager, "InvalidInitialization")
+		await expect(manager.connect(carbon).initializePledges(config.beneficiary, 1)).to.be.revertedWithCustomError(manager, "InvalidInitialization")
 		expect(await manager.isPledgedNftInCustody(config.tokenId)).to.equal(false)
 	})
 
-	it("pledges the actual NFT and permits immediate Safe-only return", async () => {
+	it("pledges the actual NFT without a Safe approval transaction and permits immediate Safe-only return", async () => {
 		const { manager, nft, carbon, safe, managerAddress } = await loadFixture(depositFixture)
 		expect(await nft.ownerOf(config.tokenId)).to.equal(managerAddress)
-		expect((await manager.nftPledges(config.tokenId)).collateralAmount).to.be.at.least(BigInt(config.minimumCollateral))
+		expect((await manager.nftPledges(config.tokenId)).collateralAmount).to.be.at.least(BigInt(config.minimumPledgeCollateral))
 		await expect(manager.connect(carbon).initiateUnlock(config.tokenId, 1)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
 		await expect(manager.connect(carbon).releasePledgedNft(config.tokenId)).to.be.revertedWithCustomError(manager, "UnauthorizedPledgeController")
 		await expect(nft.connect(carbon).transferFrom(managerAddress, config.beneficiary, config.tokenId)).to.be.reverted

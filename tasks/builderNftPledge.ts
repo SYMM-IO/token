@@ -15,7 +15,7 @@ export interface PledgeConfiguration {
 	tokenId: string
 	beneficiary: string
 	controller: string
-	minimumCollateral: string
+	minimumPledgeCollateral: string
 }
 
 export function readPledgeConfiguration(path: string): PledgeConfiguration {
@@ -26,7 +26,7 @@ export function readPledgeConfiguration(path: string): PledgeConfiguration {
 		if (BigInt(config[key]) === 0n) throw new Error(`Zero ${key}`)
 	}
 	if (new Set([config.manager, config.nft, config.beneficiary, config.controller]).size !== 4) throw new Error("Configuration addresses must differ")
-	if (!/^\d+$/.test(config.tokenId) || !/^\d+$/.test(config.minimumCollateral) || BigInt(config.minimumCollateral) === 0n)
+	if (!/^\d+$/.test(config.tokenId) || !/^\d+$/.test(config.minimumPledgeCollateral) || BigInt(config.minimumPledgeCollateral) === 0n)
 		throw new Error("Invalid pledge amount or ID")
 	return config
 }
@@ -35,11 +35,6 @@ export function pledgeTransactions(config: PledgeConfiguration, manager: Interfa
 	const nft = new Interface(["function approve(address to,uint256 tokenId)"])
 	const tx = (from: string, to: string, data: string) => ({ chainId: config.chainId, from, to, value: "0", data })
 	return {
-		configure: tx(
-			config.controller,
-			config.manager,
-			manager.encodeFunctionData("configureNftPledge", [config.tokenId, config.beneficiary, config.minimumCollateral]),
-		),
 		approve: tx(config.beneficiary, config.nft, nft.encodeFunctionData("approve", [config.manager, config.tokenId])),
 		pledge: tx(config.beneficiary, config.manager, manager.encodeFunctionData("lockNftAsPledgeForSymmio", [config.tokenId])),
 		release: tx(config.controller, config.manager, manager.encodeFunctionData("releasePledgedNft", [config.tokenId])),
@@ -49,7 +44,7 @@ export function pledgeTransactions(config: PledgeConfiguration, manager: Interfa
 
 task("pledge:prepare", "Prepare unsigned manager upgrade inputs and pledge calldata; never broadcasts")
 	.addOptionalParam("configfile", "Public pledge configuration", "configs/carbon-builder-nft-pledge.json")
-	.addOptionalParam("output", "Output manifest", "artifacts/pledge/carbon-preparation.json")
+	.addOptionalParam("output", "Output manifest", "artifacts/pledge/user-initiated/carbon-preparation.json")
 	.setAction(async ({ configfile, output }, hre) => {
 		await hre.run("compile")
 		const config = readPledgeConfiguration(configfile)
@@ -62,7 +57,7 @@ task("pledge:prepare", "Prepare unsigned manager upgrade inputs and pledge calld
 		const build = await hre.artifacts.getBuildInfo(PLEDGE_MANAGER)
 		if (!build) throw new Error("Missing compiler build information")
 		const creation = await new ContractFactory(artifact.abi, artifact.bytecode).getDeployTransaction()
-		const initializationCalldata = factory.interface.encodeFunctionData("initializePledges", [config.controller])
+		const initializationCalldata = factory.interface.encodeFunctionData("initializePledges", [config.controller, config.minimumPledgeCollateral])
 		const manifest = {
 			status: "prepared-not-deployed-or-upgraded",
 			configuration: config,
@@ -86,7 +81,7 @@ task("pledge:prepare", "Prepare unsigned manager upgrade inputs and pledge calld
 		writeFileSync(output, JSON.stringify(manifest, null, 2) + "\n")
 		writeFileSync(`${output}.solc-input.json`, JSON.stringify(build.input, null, 2) + "\n")
 		// Independent actions. Never batch release and seizure together.
-		for (const action of ["configure", "release", "seize"] as const) {
+		for (const action of ["release", "seize"] as const) {
 			const { to, value, data } = manifest.transactions[action]
 			writeFileSync(
 				`${output}.${action}.safe.json`,

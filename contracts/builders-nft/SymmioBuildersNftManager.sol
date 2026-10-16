@@ -130,25 +130,24 @@ contract SymmioBuildersNftManager is
 	// Pledge storage is appended after all V1 state. Never reorder the existing layout.
 	/// @notice Fixed pledge authority and seizure recipient, initialized to the SYMMIO Safe.
 	address public pledgeController;
+	/// @notice Automatic collateral floor for every user-initiated pledge. No per-NFT approval is needed.
+	uint256 public minimumPledgeCollateral;
 	mapping(uint256 => NftPledge) public nftPledges;
 
 	enum PledgeStatus {
 		None,
-		AwaitingDeposit,
 		Locked,
 		Released,
 		Seized
 	}
 	struct NftPledge {
 		address beneficiary;
-		uint256 minimumCollateral;
 		uint256 collateralAmount;
 		PledgeStatus status;
 		address settlementRecipient;
 	}
 
-	event PledgeControllerInitialized(address indexed controller);
-	event NftPledgeConfigured(uint256 indexed tokenId, address indexed beneficiary, uint256 minimumCollateral);
+	event PledgeControllerInitialized(address indexed controller, uint256 minimumCollateral);
 	event NftPledged(uint256 indexed tokenId, address indexed beneficiary, uint256 collateralAmount);
 	event PledgedNftReleased(uint256 indexed tokenId, address indexed beneficiary);
 	event PledgedNftSeized(uint256 indexed tokenId, address indexed recipient);
@@ -161,6 +160,7 @@ contract SymmioBuildersNftManager is
 	error InvalidPledgeTransfer();
 	error PledgeNotInCustody();
 	error ProtectedPledgeNFT();
+	error PledgesNotInitialized();
 
 	modifier onlyPledgeController() {
 		if (msg.sender != pledgeController) revert UnauthorizedPledgeController();
@@ -419,33 +419,29 @@ contract SymmioBuildersNftManager is
 	/// @notice Enable pledges once, normally through the existing proxy's upgradeAndCall.
 	/// @dev The transparent ProxyAdmin may call during atomic upgrade initialization.
 	///      A manager administrator may initialize separately; ordinary users cannot.
-	function initializePledges(address controller) external reinitializer(2) {
+	function initializePledges(address controller, uint256 minimumCollateral) external reinitializer(2) {
 		if (msg.sender != ERC1967Utils.getAdmin() && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert UnauthorizedPledgeController();
-		if (controller == address(0) || controller == address(this) || address(nftContract) == address(0)) revert InvalidPledgeConfiguration();
-		pledgeController = controller;
-		emit PledgeControllerInitialized(controller);
-	}
-
-	/// @notice Approve one NFT and its beneficiary/minimum collateral before custody.
-	/// @dev Configuration is single-use and cannot change after approval, even after settlement.
-	function configureNftPledge(uint256 tokenId, address beneficiary, uint256 minimumCollateral) external onlyPledgeController {
-		if (nftPledges[tokenId].status != PledgeStatus.None) revert InvalidPledgeStatus();
-		if (beneficiary == address(0) || beneficiary == address(this) || beneficiary == pledgeController || minimumCollateral == 0)
+		if (controller == address(0) || controller == address(this) || address(nftContract) == address(0) || minimumCollateral == 0)
 			revert InvalidPledgeConfiguration();
-		if (nftContract.ownerOf(tokenId) != beneficiary) revert NotTokenOwner();
-		nftPledges[tokenId] = NftPledge(beneficiary, minimumCollateral, 0, PledgeStatus.AwaitingDeposit, address(0));
-		emit NftPledgeConfigured(tokenId, beneficiary, minimumCollateral);
+		pledgeController = controller;
+		minimumPledgeCollateral = minimumCollateral;
+		emit PledgeControllerInitialized(controller, minimumCollateral);
 	}
 
-	/// @notice Pledge the caller's approved NFT to SYMMIO until the Safe releases or seizes it.
-	/// @dev Approve this manager on the NFT first. No time restriction or independent withdrawal exists.
+	/// @notice Pledge the caller's NFT to SYMMIO without prior SYMMIO approval.
+	/// @dev Approve this manager on the NFT first. The caller becomes the fixed beneficiary.
+	///      No time restriction or independent withdrawal exists; only the Safe may release or seize.
 	function lockNftAsPledgeForSymmio(uint256 tokenId) external nonReentrant whenNotPaused {
-		NftPledge storage pledge = nftPledges[tokenId];
-		if (pledge.status != PledgeStatus.AwaitingDeposit) revert InvalidPledgeStatus();
-		if (pledge.beneficiary != msg.sender || nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
-		_recordNftPledge(tokenId, pledge);
+		if (pledgeController == address(0)) revert PledgesNotInitialized();
+		if (nftPledges[tokenId].status != PledgeStatus.None) revert InvalidPledgeStatus();
+		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		if (data.unlockingAmount != 0) revert TokenHasActiveUnlock();
+		if (data.amount < minimumPledgeCollateral) revert AmountBelowMinimum(data.amount, minimumPledgeCollateral);
+		nftPledges[tokenId] = NftPledge(msg.sender, data.amount, PledgeStatus.Locked, address(0));
 		nftContract.safeTransferFrom(msg.sender, address(this), tokenId);
 		if (!isPledgedNftInCustody(tokenId)) revert PledgeNotInCustody();
+		emit NftPledged(tokenId, msg.sender, data.amount);
 	}
 
 	/// @dev Accept only the transfer initiated by lockNftAsPledgeForSymmio, not unsolicited safe transfers.
@@ -458,15 +454,6 @@ contract SymmioBuildersNftManager is
 		return IERC721Receiver.onERC721Received.selector;
 	}
 
-	/// @notice Register an accidental ordinary transfer for a previously configured pledge.
-	/// @dev ERC721 cannot identify the previous owner after transferFrom. The preapproved beneficiary is preserved.
-	function recordNftPledge(uint256 tokenId) external nonReentrant whenNotPaused {
-		NftPledge storage pledge = nftPledges[tokenId];
-		if (pledge.status != PledgeStatus.AwaitingDeposit) revert InvalidPledgeStatus();
-		if (!isPledgedNftInCustody(tokenId)) revert PledgeNotInCustody();
-		_recordNftPledge(tokenId, pledge);
-	}
-
 	function releasePledgedNft(uint256 tokenId) external onlyPledgeController nonReentrant whenNotPaused {
 		_settleNftPledge(tokenId, PledgeStatus.Released, nftPledges[tokenId].beneficiary);
 		emit PledgedNftReleased(tokenId, nftPledges[tokenId].beneficiary);
@@ -475,17 +462,6 @@ contract SymmioBuildersNftManager is
 	function seizePledgedNft(uint256 tokenId) external onlyPledgeController nonReentrant whenNotPaused {
 		_settleNftPledge(tokenId, PledgeStatus.Seized, pledgeController);
 		emit PledgedNftSeized(tokenId, pledgeController);
-	}
-
-	/// @notice Return an unregistered ordinary transfer to its preapproved beneficiary and close its lifecycle.
-	function returnUnregisteredPledgedNft(uint256 tokenId) external onlyPledgeController nonReentrant whenNotPaused {
-		NftPledge storage pledge = nftPledges[tokenId];
-		if (pledge.status != PledgeStatus.AwaitingDeposit) revert InvalidPledgeStatus();
-		if (!isPledgedNftInCustody(tokenId)) revert PledgeNotInCustody();
-		pledge.status = PledgeStatus.Released;
-		pledge.settlementRecipient = pledge.beneficiary;
-		nftContract.safeTransferFrom(address(this), pledge.beneficiary, tokenId);
-		emit PledgedNftReleased(tokenId, pledge.beneficiary);
 	}
 
 	/// @notice Recover a raw resend only to the previously recorded release/seizure recipient.
@@ -497,7 +473,7 @@ contract SymmioBuildersNftManager is
 		emit PledgedNftRecovered(tokenId, pledge.settlementRecipient);
 	}
 
-	/// @notice Recover unrelated NFTs to the Safe. Configured pledges remain protected even after settlement.
+	/// @notice Recover unrelated or never-pledged NFTs to the Safe. Pledged IDs stay protected after settlement.
 	function recoverUnrelatedPledgeNft(address token, uint256 tokenId) external onlyPledgeController nonReentrant whenNotPaused {
 		if (token == address(nftContract) && nftPledges[tokenId].status != PledgeStatus.None) revert ProtectedPledgeNFT();
 		IERC721(token).safeTransferFrom(address(this), pledgeController, tokenId);
@@ -511,15 +487,6 @@ contract SymmioBuildersNftManager is
 		} catch {
 			return false;
 		}
-	}
-
-	function _recordNftPledge(uint256 tokenId, NftPledge storage pledge) private {
-		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
-		if (data.unlockingAmount != 0) revert TokenHasActiveUnlock();
-		if (data.amount < pledge.minimumCollateral) revert AmountBelowMinimum(data.amount, pledge.minimumCollateral);
-		pledge.collateralAmount = data.amount;
-		pledge.status = PledgeStatus.Locked;
-		emit NftPledged(tokenId, pledge.beneficiary, data.amount);
 	}
 
 	function _settleNftPledge(uint256 tokenId, PledgeStatus status, address recipient) private {

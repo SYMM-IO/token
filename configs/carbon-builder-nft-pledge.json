@@ -5,5 +5,5 @@
 	"tokenId": "1",
 	"beneficiary": "0x5750D70f57658b8A28a8ae659c3f8020B9D4117f",
 	"controller": "0x5146C35725d9b8F11A84ebD4a3abe9845698Ada9",
-	"minimumCollateral": "8800000000000000000000000"
+	"minimumPledgeCollateral": "8800000000000000000000000"
 }

@@ -24,8 +24,7 @@ async function baseFixture() {
 
 async function fixture() {
 	const f = await baseFixture()
-	await f.manager.initializePledges(f.safe.address)
-	await f.manager.connect(f.safe).configureNftPledge(ID, f.carbon.address, MINIMUM)
+	await f.manager.initializePledges(f.safe.address, MINIMUM)
 	const deposit = async () => {
 		await f.nft.connect(f.carbon).approve(f.address, ID)
 		return f.manager.connect(f.carbon).lockNftAsPledgeForSymmio(ID)
@@ -44,36 +43,30 @@ describe("NFTManager SYMMIO pledges", () => {
 	it("enables pledges only once through an authorized manager administrator", async () => {
 		const { manager, stranger, safe, address } = await loadFixture(baseFixture)
 		expect(await manager.pledgeController()).to.equal(ethers.ZeroAddress)
-		await expect(manager.connect(stranger).initializePledges(safe.address)).to.be.revertedWithCustomError(manager, "UnauthorizedPledgeController")
-		for (const invalid of [ethers.ZeroAddress, address]) {
-			await expect(manager.initializePledges(invalid)).to.be.revertedWithCustomError(manager, "InvalidPledgeConfiguration")
-		}
-		await expect(manager.initializePledges(safe.address)).to.emit(manager, "PledgeControllerInitialized").withArgs(safe.address)
-		await expect(manager.initializePledges(stranger.address)).to.be.revertedWithCustomError(manager, "InvalidInitialization")
-		const implementation = await ethers.getContractAt("SymmioBuildersNftManager", await upgrades.erc1967.getImplementationAddress(address))
-		await expect(implementation.initializePledges(safe.address)).to.be.revertedWithCustomError(implementation, "InvalidInitialization")
-	})
-
-	it("only allows the configured Safe to approve each NFT and fixes its terms", async () => {
-		const { manager, admin, stranger, safe, carbon, address } = await loadFixture(fixture)
-		for (const actor of [admin, stranger, carbon]) {
-			await expect(manager.connect(actor).configureNftPledge(0, stranger.address, 1)).to.be.revertedWithCustomError(
-				manager,
-				"UnauthorizedPledgeController",
-			)
-		}
-		for (const beneficiary of [ethers.ZeroAddress, address, safe.address]) {
-			await expect(manager.connect(safe).configureNftPledge(0, beneficiary, 1)).to.be.revertedWithCustomError(manager, "InvalidPledgeConfiguration")
-		}
-		await expect(manager.connect(safe).configureNftPledge(0, stranger.address, 0)).to.be.revertedWithCustomError(
+		await expect(manager.connect(stranger).initializePledges(safe.address, MINIMUM)).to.be.revertedWithCustomError(
 			manager,
-			"InvalidPledgeConfiguration",
+			"UnauthorizedPledgeController",
 		)
-		await expect(manager.connect(safe).configureNftPledge(0, carbon.address, 1)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
-		await expect(manager.connect(safe).configureNftPledge(ID, carbon.address, MINIMUM)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
+		for (const invalid of [ethers.ZeroAddress, address]) {
+			await expect(manager.initializePledges(invalid, MINIMUM)).to.be.revertedWithCustomError(manager, "InvalidPledgeConfiguration")
+		}
+		await expect(manager.initializePledges(safe.address, 0)).to.be.revertedWithCustomError(manager, "InvalidPledgeConfiguration")
+		await expect(manager.initializePledges(safe.address, MINIMUM)).to.emit(manager, "PledgeControllerInitialized").withArgs(safe.address, MINIMUM)
+		expect(await manager.minimumPledgeCollateral()).to.equal(MINIMUM)
+		await expect(manager.initializePledges(stranger.address, MINIMUM)).to.be.revertedWithCustomError(manager, "InvalidInitialization")
+		const implementation = await ethers.getContractAt("SymmioBuildersNftManager", await upgrades.erc1967.getImplementationAddress(address))
+		await expect(implementation.initializePledges(safe.address, MINIMUM)).to.be.revertedWithCustomError(implementation, "InvalidInitialization")
 	})
 
-	it("takes approved custody, preserves the beneficiary and clears NFT approvals", async () => {
+	it("rejects pledges before protocol initialization without taking custody", async () => {
+		const { manager, nft, carbon, address } = await loadFixture(baseFixture)
+		await nft.connect(carbon).approve(address, ID)
+		await expect(manager.connect(carbon).lockNftAsPledgeForSymmio(ID)).to.be.revertedWithCustomError(manager, "PledgesNotInitialized")
+		expect(await nft.ownerOf(ID)).to.equal(carbon.address)
+		expect((await manager.nftPledges(ID)).status).to.equal(0)
+	})
+
+	it("accepts a user pledge without Safe approval, records its beneficiary and clears NFT approvals", async () => {
 		const { manager, nft, carbon, address, deposit } = await loadFixture(fixture)
 		await expect(deposit()).to.emit(manager, "NftPledged").withArgs(ID, carbon.address, MINIMUM)
 		expect(await nft.ownerOf(ID)).to.equal(address)
@@ -82,21 +75,21 @@ describe("NFTManager SYMMIO pledges", () => {
 		const p = await manager.nftPledges(ID)
 		expect(p.beneficiary).to.equal(carbon.address)
 		expect(p.collateralAmount).to.equal(MINIMUM)
-		expect(p.status).to.equal(2)
+		expect(p.status).to.equal(1)
 		expect(await manager.totalVested()).to.equal(0)
 	})
 
-	it("requires Safe approval, owner initiation and NFT approval", async () => {
+	it("requires owner initiation and NFT approval, and records a new owner after transfer", async () => {
 		const { manager, nft, carbon, stranger, address } = await loadFixture(fixture)
-		await expect(manager.connect(stranger).lockNftAsPledgeForSymmio(0)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
 		await nft.connect(carbon).approve(stranger.address, ID)
 		await expect(manager.connect(stranger).lockNftAsPledgeForSymmio(ID)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
 		await expect(manager.connect(carbon).lockNftAsPledgeForSymmio(ID)).to.be.revertedWithCustomError(nft, "ERC721InsufficientApproval")
-		expect((await manager.nftPledges(ID)).status).to.equal(1)
+		expect((await manager.nftPledges(ID)).status).to.equal(0)
 		await nft.connect(carbon).transferFrom(carbon.address, stranger.address, ID)
 		await nft.connect(stranger).approve(address, ID)
 		await expect(manager.connect(carbon).lockNftAsPledgeForSymmio(ID)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
-		await expect(manager.connect(stranger).lockNftAsPledgeForSymmio(ID)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
+		await manager.connect(stranger).lockNftAsPledgeForSymmio(ID)
+		expect((await manager.nftPledges(ID)).beneficiary).to.equal(stranger.address)
 	})
 
 	it("rejects insufficient collateral and snapshots amounts above the minimum", async () => {
@@ -106,6 +99,7 @@ describe("NFTManager SYMMIO pledges", () => {
 			.to.be.revertedWithCustomError(manager, "AmountBelowMinimum")
 			.withArgs(MINIMUM - 1n, MINIMUM)
 		expect(await nft.ownerOf(ID)).to.equal(carbon.address)
+		expect(await manager.nftPledges(ID)).to.deep.equal([ethers.ZeroAddress, 0n, 0n, ethers.ZeroAddress])
 		await nft.updateLockData(ID, MINIMUM + 1n, 0, "IntentX")
 		await deposit()
 		expect((await manager.nftPledges(ID)).collateralAmount).to.equal(MINIMUM + 1n)
@@ -138,37 +132,26 @@ describe("NFTManager SYMMIO pledges", () => {
 		await stopImpersonatingAccount(nftAddress)
 	})
 
-	it("registers a configured ordinary transfer permissionlessly without changing its beneficiary", async () => {
-		const { manager, nft, carbon, stranger, address } = await loadFixture(fixture)
-		await expect(manager.recordNftPledge(ID)).to.be.revertedWithCustomError(manager, "PledgeNotInCustody")
-		await nft.connect(carbon).transferFrom(carbon.address, address, ID)
-		expect((await manager.nftPledges(ID)).status).to.equal(1)
-		await expect(manager.connect(stranger).recordNftPledge(ID)).to.emit(manager, "NftPledged").withArgs(ID, carbon.address, MINIMUM)
-		await expect(manager.recordNftPledge(ID)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
-	})
-
-	it("checks pending unlocks and minimum collateral on ordinary-transfer registration", async () => {
-		const { manager, nft, carbon, address } = await loadFixture(fixture)
-		await nft.connect(carbon).transferFrom(carbon.address, address, ID)
-		await nft.updateLockData(ID, MINIMUM, 1, "IntentX")
-		await expect(manager.recordNftPledge(ID)).to.be.revertedWithCustomError(manager, "TokenHasActiveUnlock")
-		await nft.updateLockData(ID, MINIMUM - 1n, 0, "IntentX")
-		await expect(manager.recordNftPledge(ID)).to.be.revertedWithCustomError(manager, "AmountBelowMinimum")
-	})
-
-	it("cannot register an unapproved raw deposit and recovers it only to the Safe", async () => {
+	it("never assigns a beneficiary to a raw deposit and permits only Safe recovery", async () => {
 		const { manager, nft, stranger, safe, address } = await loadFixture(fixture)
 		await nft.connect(stranger).transferFrom(stranger.address, address, 0)
-		await expect(manager.recordNftPledge(0)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
-		await expect(manager.connect(safe).returnUnregisteredPledgedNft(0)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
+		expect(await manager.isPledgedNftInCustody(0)).to.equal(true)
+		expect(await manager.nftPledges(0)).to.deep.equal([ethers.ZeroAddress, 0n, 0n, ethers.ZeroAddress])
+		await expect(manager.connect(stranger).lockNftAsPledgeForSymmio(0)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
+		await expect(manager.connect(safe).lockNftAsPledgeForSymmio(0)).to.be.revertedWithCustomError(manager, "NotTokenOwner")
+		await expect(manager.connect(stranger).recoverUnrelatedPledgeNft(await nft.getAddress(), 0)).to.be.revertedWithCustomError(
+			manager,
+			"UnauthorizedPledgeController",
+		)
+		for (const action of ["releasePledgedNft", "seizePledgedNft"] as const)
+			await expect(manager.connect(safe)[action](0)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
 		await manager.connect(safe).recoverUnrelatedPledgeNft(await nft.getAddress(), 0)
 		expect(await nft.ownerOf(0)).to.equal(safe.address)
 		expect((await manager.nftPledges(0)).status).to.equal(0)
 	})
 
-	it("supports independently approved NFTs with different owners and thresholds", async () => {
+	it("allows different owners to pledge independently without any Safe transaction", async () => {
 		const { manager, nft, stranger, safe, carbon, address, deposit } = await loadFixture(fixture)
-		await manager.connect(safe).configureNftPledge(0, stranger.address, 123n)
 		await nft.connect(stranger).approve(address, 0)
 		await manager.connect(stranger).lockNftAsPledgeForSymmio(0)
 		await deposit()
@@ -206,7 +189,7 @@ describe("NFTManager SYMMIO pledges", () => {
 			expect(await nft.ownerOf(ID)).to.equal(recipient)
 			expect(await nft.getLockData(ID)).to.deep.equal(dataBefore)
 			const p = await manager.nftPledges(ID)
-			expect(p.status).to.equal(released ? 3 : 4)
+			expect(p.status).to.equal(released ? 2 : 3)
 			expect(p.settlementRecipient).to.equal(recipient)
 			expect(await manager.isPledgedNftInCustody(ID)).to.equal(false)
 			for (const repeat of ["releasePledgedNft", "seizePledgedNft"] as const)
@@ -218,7 +201,7 @@ describe("NFTManager SYMMIO pledges", () => {
 			await deposit()
 			await nft.pauseTransfers()
 			await expect(manager.connect(safe)[action](ID)).to.be.revertedWithCustomError(nft, "TransfersPaused")
-			expect((await manager.nftPledges(ID)).status).to.equal(2)
+			expect((await manager.nftPledges(ID)).status).to.equal(1)
 			expect((await manager.nftPledges(ID)).settlementRecipient).to.equal(ethers.ZeroAddress)
 			expect(await nft.ownerOf(ID)).to.equal(address)
 			await nft.unpauseTransfers()
@@ -230,12 +213,19 @@ describe("NFTManager SYMMIO pledges", () => {
 			await deposit()
 			await manager.connect(safe)[action](ID)
 			const recipient = action === "releasePledgedNft" ? carbon : safe
+			await nft.connect(recipient).approve(address, ID)
+			await expect(manager.connect(recipient).lockNftAsPledgeForSymmio(ID)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
+			const settled = await manager.nftPledges(ID)
 			await nft.connect(recipient).transferFrom(recipient.address, address, ID)
-			await expect(manager.recordNftPledge(ID)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
+			await expect(manager.connect(safe).recoverUnrelatedPledgeNft(await nft.getAddress(), ID)).to.be.revertedWithCustomError(
+				manager,
+				"ProtectedPledgeNFT",
+			)
 			await expect(manager.connect(stranger).recoverSettledPledgedNft(ID)).to.be.revertedWithCustomError(manager, "UnauthorizedPledgeController")
 			await manager.connect(safe).recoverSettledPledgedNft(ID)
 			expect(await nft.ownerOf(ID)).to.equal(recipient.address)
-			await expect(manager.connect(safe).configureNftPledge(ID, carbon.address, 1)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
+			expect(await manager.nftPledges(ID)).to.deep.equal(settled)
+			await expect(manager.connect(safe).recoverSettledPledgedNft(ID)).to.be.revertedWithCustomError(manager, "PledgeNotInCustody")
 		})
 	}
 
@@ -246,7 +236,7 @@ describe("NFTManager SYMMIO pledges", () => {
 		await manager.unpause()
 		await nft.pauseTransfers()
 		await expect(deposit()).to.be.revertedWithCustomError(nft, "TransfersPaused")
-		expect((await manager.nftPledges(ID)).status).to.equal(1)
+		expect((await manager.nftPledges(ID)).status).to.equal(0)
 		await nft.unpauseTransfers()
 		await deposit()
 		await manager.pause()
@@ -255,21 +245,9 @@ describe("NFTManager SYMMIO pledges", () => {
 		await manager.connect(safe).releasePledgedNft(ID)
 	})
 
-	it("returns invalid ordinary deposits to the preapproved owner and closes their lifecycle", async () => {
-		const { manager, nft, carbon, stranger, safe, address } = await loadFixture(fixture)
-		await nft.updateLockData(ID, 1, 0, "IntentX")
-		await nft.connect(carbon).transferFrom(carbon.address, address, ID)
-		await expect(manager.connect(stranger).returnUnregisteredPledgedNft(ID)).to.be.revertedWithCustomError(manager, "UnauthorizedPledgeController")
-		await manager.connect(safe).returnUnregisteredPledgedNft(ID)
-		expect(await nft.ownerOf(ID)).to.equal(carbon.address)
-		expect((await manager.nftPledges(ID)).status).to.equal(3)
-		expect((await manager.nftPledges(ID)).collateralAmount).to.equal(0)
-	})
-
 	it("cannot bypass locked collateral through recovery routes", async () => {
 		const { manager, nft, safe, deposit } = await loadFixture(fixture)
 		await deposit()
-		await expect(manager.connect(safe).returnUnregisteredPledgedNft(ID)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
 		await expect(manager.connect(safe).recoverSettledPledgedNft(ID)).to.be.revertedWithCustomError(manager, "InvalidPledgeStatus")
 		await expect(manager.connect(safe).recoverUnrelatedPledgeNft(await nft.getAddress(), ID)).to.be.revertedWithCustomError(
 			manager,
@@ -327,29 +305,27 @@ describe("NFTManager SYMMIO pledges", () => {
 		const { manager, nft, carbon, safe, address } = await loadFixture(baseFixture)
 		const receiver = await (await ethers.getContractFactory("PledgeReceiverMock")).deploy()
 		const beneficiary = await receiver.getAddress()
-		await manager.initializePledges(safe.address)
+		await manager.initializePledges(safe.address, MINIMUM)
 		await nft.connect(carbon).transferFrom(carbon.address, beneficiary, ID)
-		await manager.connect(safe).configureNftPledge(ID, beneficiary, MINIMUM)
 		await receiver.execute(await nft.getAddress(), nft.interface.encodeFunctionData("approve", [address, ID]))
 		await receiver.execute(address, manager.interface.encodeFunctionData("lockNftAsPledgeForSymmio", [ID]))
 		await receiver.configure(true, ethers.ZeroAddress, "0x")
 		await expect(manager.connect(safe).releasePledgedNft(ID)).to.be.revertedWith("Receiver rejects NFT")
-		expect((await manager.nftPledges(ID)).status).to.equal(2)
+		expect((await manager.nftPledges(ID)).status).to.equal(1)
 		expect(await nft.ownerOf(ID)).to.equal(address)
 	})
 
 	it("blocks authorized controller reentrancy during seizure", async () => {
 		const { manager, nft, carbon, address } = await loadFixture(baseFixture)
 		const receiver = await (await ethers.getContractFactory("PledgeReceiverMock")).deploy()
-		await manager.initializePledges(await receiver.getAddress())
-		await receiver.execute(address, manager.interface.encodeFunctionData("configureNftPledge", [ID, carbon.address, MINIMUM]))
+		await manager.initializePledges(await receiver.getAddress(), MINIMUM)
 		await nft.connect(carbon).approve(address, ID)
 		await manager.connect(carbon).lockNftAsPledgeForSymmio(ID)
 		await receiver.configure(false, address, manager.interface.encodeFunctionData("releasePledgedNft", [ID]))
 		await receiver.execute(address, manager.interface.encodeFunctionData("seizePledgedNft", [ID]))
 		expect(await receiver.reentrySucceeded()).to.equal(false)
 		expect(await receiver.reentryResult()).to.equal(ethers.id("ReentrancyGuardReentrantCall()").slice(0, 10))
-		expect((await manager.nftPledges(ID)).status).to.equal(4)
+		expect((await manager.nftPledges(ID)).status).to.equal(3)
 	})
 
 	for (const state of ["locked", "released", "seized"] as const) {
@@ -366,6 +342,7 @@ describe("NFTManager SYMMIO pledges", () => {
 			expect(await manager.nftPledges(ID)).to.deep.equal(before)
 			expect(await nft.ownerOf(ID)).to.equal(owner)
 			expect(await manager.pledgeController()).to.equal(safe.address)
+			expect(await manager.minimumPledgeCollateral()).to.equal(MINIMUM)
 			if (state === "locked") {
 				await manager.connect(safe).releasePledgedNft(ID)
 				expect(await nft.ownerOf(ID)).to.equal(carbon.address)
