@@ -1,0 +1,472 @@
+{
+	"revision": "493837da4bf33f2c194dc500f835a1bb39f7dc74",
+	"contract": "contracts/builders-nft/SymmioBuildersNftManager.sol:SymmioBuildersNftManager",
+	"layout": {
+		"solcVersion": "0.8.27",
+		"storage": [
+			{
+				"label": "SYMM",
+				"offset": 0,
+				"slot": "0",
+				"type": "t_contract(IERC20Extended)12086",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:84"
+			},
+			{
+				"label": "nftContract",
+				"offset": 0,
+				"slot": "1",
+				"type": "t_contract(ISymmioBuildersNft)14563",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:85"
+			},
+			{
+				"label": "minLockAmount",
+				"offset": 0,
+				"slot": "2",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:88"
+			},
+			{
+				"label": "cliffDuration",
+				"offset": 0,
+				"slot": "3",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:91"
+			},
+			{
+				"label": "vestingDuration",
+				"offset": 0,
+				"slot": "4",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:92"
+			},
+			{
+				"label": "lockedClaimPenaltyRate",
+				"offset": 0,
+				"slot": "5",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:98"
+			},
+			{
+				"label": "lockedClaimPenaltyReceiver",
+				"offset": 0,
+				"slot": "6",
+				"type": "t_address",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:101"
+			},
+			{
+				"label": "_unlockIdCounter",
+				"offset": 0,
+				"slot": "7",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:104"
+			},
+			{
+				"label": "totalVested",
+				"offset": 0,
+				"slot": "8",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:106"
+			},
+			{
+				"label": "unlockRequests",
+				"offset": 0,
+				"slot": "9",
+				"type": "t_mapping(t_uint256,t_struct(UnlockRequest)12214_storage)",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:110"
+			},
+			{
+				"label": "tokenUnlockIds",
+				"offset": 0,
+				"slot": "10",
+				"type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:113"
+			},
+			{
+				"label": "_nextFlowId",
+				"offset": 0,
+				"slot": "11",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:116"
+			},
+			{
+				"label": "_flows",
+				"offset": 0,
+				"slot": "12",
+				"type": "t_mapping(t_uint256,t_struct(Flow)14575_storage)",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:118"
+			},
+			{
+				"label": "_userFlowIds",
+				"offset": 0,
+				"slot": "13",
+				"type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:119"
+			},
+			{
+				"label": "maxUserActiveUnlockRequests",
+				"offset": 0,
+				"slot": "14",
+				"type": "t_uint256",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:124"
+			},
+			{
+				"label": "userActiveUnlockRequestCount",
+				"offset": 0,
+				"slot": "15",
+				"type": "t_mapping(t_address,t_uint256)",
+				"contract": "SymmioBuildersNftManager",
+				"src": "contracts/builders-nft/SymmioBuildersNftManager.sol:126"
+			}
+		],
+		"types": {
+			"t_address": {
+				"label": "address",
+				"numberOfBytes": "20"
+			},
+			"t_array(t_bytes32)dyn_storage": {
+				"label": "bytes32[]",
+				"numberOfBytes": "32"
+			},
+			"t_bool": {
+				"label": "bool",
+				"numberOfBytes": "1"
+			},
+			"t_bytes32": {
+				"label": "bytes32",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_address,t_bool)": {
+				"label": "mapping(address => bool)",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_bytes32,t_struct(AddressSet)3609_storage)": {
+				"label": "mapping(bytes32 => struct EnumerableSet.AddressSet)",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_bytes32,t_struct(RoleData)24_storage)": {
+				"label": "mapping(bytes32 => struct AccessControlUpgradeable.RoleData)",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_bytes32,t_uint256)": {
+				"label": "mapping(bytes32 => uint256)",
+				"numberOfBytes": "32"
+			},
+			"t_struct(AccessControlEnumerableStorage)162_storage": {
+				"label": "struct AccessControlEnumerableUpgradeable.AccessControlEnumerableStorage",
+				"members": [
+					{
+						"label": "_roleMembers",
+						"type": "t_mapping(t_bytes32,t_struct(AddressSet)3609_storage)",
+						"offset": 0,
+						"slot": "0"
+					}
+				],
+				"numberOfBytes": "32"
+			},
+			"t_struct(AccessControlStorage)34_storage": {
+				"label": "struct AccessControlUpgradeable.AccessControlStorage",
+				"members": [
+					{
+						"label": "_roles",
+						"type": "t_mapping(t_bytes32,t_struct(RoleData)24_storage)",
+						"offset": 0,
+						"slot": "0"
+					}
+				],
+				"numberOfBytes": "32"
+			},
+			"t_struct(AddressSet)3609_storage": {
+				"label": "struct EnumerableSet.AddressSet",
+				"members": [
+					{
+						"label": "_inner",
+						"type": "t_struct(Set)3477_storage",
+						"offset": 0,
+						"slot": "0"
+					}
+				],
+				"numberOfBytes": "64"
+			},
+			"t_struct(InitializableStorage)241_storage": {
+				"label": "struct Initializable.InitializableStorage",
+				"members": [
+					{
+						"label": "_initialized",
+						"type": "t_uint64",
+						"offset": 0,
+						"slot": "0"
+					},
+					{
+						"label": "_initializing",
+						"type": "t_bool",
+						"offset": 8,
+						"slot": "0"
+					}
+				],
+				"numberOfBytes": "32"
+			},
+			"t_struct(PausableStorage)796_storage": {
+				"label": "struct PausableUpgradeable.PausableStorage",
+				"members": [
+					{
+						"label": "_paused",
+						"type": "t_bool",
+						"offset": 0,
+						"slot": "0"
+					}
+				],
+				"numberOfBytes": "32"
+			},
+			"t_struct(ReentrancyGuardStorage)860_storage": {
+				"label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
+				"members": [
+					{
+						"label": "_status",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "0"
+					}
+				],
+				"numberOfBytes": "32"
+			},
+			"t_struct(RoleData)24_storage": {
+				"label": "struct AccessControlUpgradeable.RoleData",
+				"members": [
+					{
+						"label": "hasRole",
+						"type": "t_mapping(t_address,t_bool)",
+						"offset": 0,
+						"slot": "0"
+					},
+					{
+						"label": "adminRole",
+						"type": "t_bytes32",
+						"offset": 0,
+						"slot": "1"
+					}
+				],
+				"numberOfBytes": "64"
+			},
+			"t_struct(Set)3477_storage": {
+				"label": "struct EnumerableSet.Set",
+				"members": [
+					{
+						"label": "_values",
+						"type": "t_array(t_bytes32)dyn_storage",
+						"offset": 0,
+						"slot": "0"
+					},
+					{
+						"label": "_positions",
+						"type": "t_mapping(t_bytes32,t_uint256)",
+						"offset": 0,
+						"slot": "1"
+					}
+				],
+				"numberOfBytes": "64"
+			},
+			"t_uint256": {
+				"label": "uint256",
+				"numberOfBytes": "32"
+			},
+			"t_uint64": {
+				"label": "uint64",
+				"numberOfBytes": "8"
+			},
+			"t_array(t_uint256)dyn_storage": {
+				"label": "uint256[]",
+				"numberOfBytes": "32"
+			},
+			"t_contract(IERC20Extended)12086": {
+				"label": "contract IERC20Extended",
+				"numberOfBytes": "20"
+			},
+			"t_contract(ISymmioBuildersNft)14563": {
+				"label": "contract ISymmioBuildersNft",
+				"numberOfBytes": "20"
+			},
+			"t_mapping(t_address,t_array(t_uint256)dyn_storage)": {
+				"label": "mapping(address => uint256[])",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_address,t_uint256)": {
+				"label": "mapping(address => uint256)",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+				"label": "mapping(uint256 => uint256[])",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_uint256,t_struct(Flow)14575_storage)": {
+				"label": "mapping(uint256 => struct Flow)",
+				"numberOfBytes": "32"
+			},
+			"t_mapping(t_uint256,t_struct(UnlockRequest)12214_storage)": {
+				"label": "mapping(uint256 => struct SymmioBuildersNftManager.UnlockRequest)",
+				"numberOfBytes": "32"
+			},
+			"t_struct(Flow)14575_storage": {
+				"label": "struct Flow",
+				"members": [
+					{
+						"label": "reqId",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "0"
+					},
+					{
+						"label": "amount",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "1"
+					},
+					{
+						"label": "startTime",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "2"
+					},
+					{
+						"label": "endTime",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "3"
+					}
+				],
+				"numberOfBytes": "128"
+			},
+			"t_struct(UnlockRequest)12214_storage": {
+				"label": "struct SymmioBuildersNftManager.UnlockRequest",
+				"members": [
+					{
+						"label": "amount",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "0"
+					},
+					{
+						"label": "unlockInitiatedTime",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "1"
+					},
+					{
+						"label": "owner",
+						"type": "t_address",
+						"offset": 0,
+						"slot": "2"
+					},
+					{
+						"label": "tokenId",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "3"
+					},
+					{
+						"label": "vestingFlowId",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "4"
+					},
+					{
+						"label": "vestingStartTime",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "5"
+					},
+					{
+						"label": "vestingEndTime",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "6"
+					},
+					{
+						"label": "netClaimedAmount",
+						"type": "t_uint256",
+						"offset": 0,
+						"slot": "7"
+					}
+				],
+				"numberOfBytes": "256"
+			}
+		},
+		"namespaces": {
+			"erc7201:openzeppelin.storage.ReentrancyGuard": [
+				{
+					"contract": "ReentrancyGuardUpgradeable",
+					"label": "_status",
+					"type": "t_uint256",
+					"src": "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol:43",
+					"offset": 0,
+					"slot": "0"
+				}
+			],
+			"erc7201:openzeppelin.storage.Pausable": [
+				{
+					"contract": "PausableUpgradeable",
+					"label": "_paused",
+					"type": "t_bool",
+					"src": "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol:21",
+					"offset": 0,
+					"slot": "0"
+				}
+			],
+			"erc7201:openzeppelin.storage.AccessControlEnumerable": [
+				{
+					"contract": "AccessControlEnumerableUpgradeable",
+					"label": "_roleMembers",
+					"type": "t_mapping(t_bytes32,t_struct(AddressSet)3609_storage)",
+					"src": "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol:19",
+					"offset": 0,
+					"slot": "0"
+				}
+			],
+			"erc7201:openzeppelin.storage.AccessControl": [
+				{
+					"contract": "AccessControlUpgradeable",
+					"label": "_roles",
+					"type": "t_mapping(t_bytes32,t_struct(RoleData)24_storage)",
+					"src": "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol:61",
+					"offset": 0,
+					"slot": "0"
+				}
+			],
+			"erc7201:openzeppelin.storage.Initializable": [
+				{
+					"contract": "Initializable",
+					"label": "_initialized",
+					"type": "t_uint64",
+					"src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+					"offset": 0,
+					"slot": "0"
+				},
+				{
+					"contract": "Initializable",
+					"label": "_initializing",
+					"type": "t_bool",
+					"src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+					"offset": 8,
+					"slot": "0"
+				}
+			]
+		}
+	},
+	"sourceHash": "0x72cd0ac607770d6b92212f6d42c479af4c92b9b53bf7a3217f04c05fb9477590",
+	"runtimeCodeHash": "0xe940bbf86252b9195d2bcfde3b59a30cb457760d8e984011b13cd30376b6c713",
+	"compiler": "0.8.27+commit.40a35a09"
+}

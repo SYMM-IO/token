@@ -1,0 +1,7 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": ["node", "mocha", "@nomicfoundation/hardhat-ethers", "@nomicfoundation/hardhat-chai-matchers", "@openzeppelin/hardhat-upgrades"]
+	},
+	"include": ["tasks/builderNftPledge.ts", "tests/builderNftPledge*.ts", "typechain-types/**/*.ts"]
+}
