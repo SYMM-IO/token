@@ -15,6 +15,7 @@ pragma solidity ^0.8.27;
  *         • Full Vesting functionality (linear vesting, penalties, percentage claims)
  *         • Unlock request management with unique ID tracking
  *         • Transfer restrictions based on unlock status
+ *         • NFT pledge custody with role-controlled slashing and release
  *         • Token minting capabilities for vesting operations
  *
  *         This contract acts as the central logic hub while the NFT contract remains simple.
@@ -27,6 +28,7 @@ import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 import { Flow, VestingFlowLib } from "./libraries/VestingFlowLib.sol";
 import { ISymmioBuildersNft } from "./interfaces/ISymmioBuildersNft.sol";
@@ -46,7 +48,13 @@ interface IERC20Extended is IERC20 {
 	function mint(address to, uint256 amount) external;
 }
 
-contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract SymmioBuildersNftManager is
+	Initializable,
+	AccessControlEnumerableUpgradeable,
+	PausableUpgradeable,
+	ReentrancyGuardUpgradeable,
+	IERC721Receiver
+{
 	using SafeERC20 for IERC20Extended;
 	using VestingFlowLib for Flow;
 
@@ -66,6 +74,9 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 
 	/// @notice Role for minting NFTs without burning SYMM tokens.
 	bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
+	/// @notice Role for slashing pledged NFT amounts and releasing pledged NFTs.
+	bytes32 public constant PLEDGE_MANAGER_ROLE = keccak256("PLEDGE_MANAGER_ROLE");
 
 	/* ──────────────────────── Storage Variables ──────────────────────── */
 
@@ -117,6 +128,10 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 
 	/// @notice Number of pending unlock requests and active vesting flows keyed by user.
 	mapping(address => uint256) public userActiveUnlockRequestCount;
+
+	/// @notice Original owner of each pledged NFT, or zero when it is not pledged.
+	/// @dev Appended after existing storage for proxy upgrade compatibility.
+	mapping(uint256 => address) public pledgeOwners;
 
 	/* ─────────────────────────────── Structs ─────────────────────────────── */
 
@@ -287,6 +302,15 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	 */
 	event LockedTokenClaimed(address indexed user, uint256 indexed flowId, uint256 amount, uint256 penalty);
 
+	/// @notice Emitted when a builder transfers an NFT into pledge custody.
+	event NFTLockedAsPledge(address indexed owner, uint256 indexed tokenId, uint256 amount);
+
+	/// @notice Emitted when a pledged amount is reduced. A zero remainder burns the NFT.
+	event NFTPledgeSlashed(address indexed owner, uint256 indexed tokenId, uint256 amount, uint256 remainingAmount);
+
+	/// @notice Emitted when a pledged NFT is returned to its recorded owner.
+	event NFTPledgeReleased(address indexed owner, uint256 indexed tokenId);
+
 	/* ─────────────────────────────── Errors ─────────────────────────────── */
 
 	error ZeroAddress();
@@ -304,6 +328,8 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 	error InvalidPenalty(uint256 penalty);
 	error NotOwner();
 	error MaxUserActiveUnlockRequestsReached(address user, uint256 maximum);
+	error NftNotPledged();
+	error UnexpectedNftTransfer();
 
 	/* ─────────────────────────── Initialization ─────────────────────────── */
 
@@ -363,6 +389,7 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		_grantRole(UNPAUSER_ROLE, _admin);
 		_grantRole(OPERATOR_ROLE, _admin);
 		_grantRole(MINTER_ROLE, _admin);
+		_grantRole(PLEDGE_MANAGER_ROLE, _admin);
 	}
 
 	/* ────────────────────── Pausing Functions ────────────────────── */
@@ -449,6 +476,72 @@ contract SymmioBuildersNftManager is Initializable, AccessControlEnumerableUpgra
 		nftContract.updateLockData(tokenId, data.amount + amount, data.unlockingAmount, data.name);
 
 		emit TokenLocked(msg.sender, tokenId, amount);
+	}
+
+	/* ────────────────────────── NFT Pledge Custody ────────────────────────── */
+
+	/**
+	 * @notice Transfer the caller's NFT into manager custody as pledge.
+	 * @param tokenId ID of the NFT to pledge.
+	 * @dev The owner must first approve the manager on the NFT contract. Pending unlocks
+	 *      must be cancelled or started as separate vesting flows before pledging.
+	 *      Only PLEDGE_MANAGER_ROLE can slash or release the pledge; no SYMM moves.
+	 */
+	function lockNftAsPledge(uint256 tokenId) external nonReentrant whenNotPaused {
+		if (nftContract.ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		if (data.unlockingAmount != 0) revert TokenHasActiveUnlock();
+		if (data.amount == 0) revert ZeroAmount();
+
+		pledgeOwners[tokenId] = msg.sender;
+		nftContract.safeTransferFrom(msg.sender, address(this), tokenId);
+
+		emit NFTLockedAsPledge(msg.sender, tokenId, data.amount);
+	}
+
+	/**
+	 * @notice Permanently reduce the SYMM amount represented by a pledged NFT.
+	 * @param tokenId ID of the pledged NFT.
+	 * @param amount Amount to slash, up to the full remaining NFT amount.
+	 * @dev No SYMM is minted or transferred. A full slash burns the NFT and clears custody records.
+	 */
+	function slashNftPledge(uint256 tokenId, uint256 amount) external onlyRole(PLEDGE_MANAGER_ROLE) nonReentrant whenNotPaused {
+		address owner = pledgeOwners[tokenId];
+		if (owner == address(0)) revert NftNotPledged();
+		if (amount == 0) revert ZeroAmount();
+		ISymmioBuildersNft.LockData memory data = nftContract.getLockData(tokenId);
+		if (amount > data.amount) revert InsufficientLockedAmount();
+		uint256 remainingAmount = data.amount - amount;
+
+		if (remainingAmount == 0) {
+			delete pledgeOwners[tokenId];
+			nftContract.burn(tokenId);
+		} else {
+			nftContract.updateLockData(tokenId, remainingAmount, 0, data.name);
+		}
+
+		emit NFTPledgeSlashed(owner, tokenId, amount, remainingAmount);
+	}
+
+	/**
+	 * @notice Return a pledged NFT, with its remaining amount, to its original owner.
+	 * @param tokenId ID of the pledged NFT.
+	 * @dev Release timing is controlled by PLEDGE_MANAGER_ROLE. A failed transfer rolls back the release.
+	 */
+	function releaseNftPledge(uint256 tokenId) external onlyRole(PLEDGE_MANAGER_ROLE) nonReentrant whenNotPaused {
+		address owner = pledgeOwners[tokenId];
+		if (owner == address(0)) revert NftNotPledged();
+		delete pledgeOwners[tokenId];
+		nftContract.safeTransferFrom(address(this), owner, tokenId);
+
+		emit NFTPledgeReleased(owner, tokenId);
+	}
+
+	/// @notice Accepts only NFTs transferred by this manager through lockNftAsPledge.
+	function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata) external view override returns (bytes4) {
+		if (msg.sender != address(nftContract) || operator != address(this) || from == address(0) || pledgeOwners[tokenId] != from)
+			revert UnexpectedNftTransfer();
+		return IERC721Receiver.onERC721Received.selector;
 	}
 
 	/* ────────────────────────── NFT Management ────────────────────────── */
